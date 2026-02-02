@@ -176,6 +176,11 @@ typedef uint64_t size_t;
 #include <faiss/IndexNeuroDropoutEnsemble.h>
 #include <faiss/IndexNeuroMissingValue.h>
 #include <faiss/IndexNeuroInhibition.h>
+#include <faiss/IndexNeuroWeighted.h>
+#include <faiss/IndexNeuroContextualWeighted.h>
+#include <faiss/IndexNeuroParallelVoting.h>
+#include <faiss/IndexNeuroCoarseToFine.h>
+#include <faiss/IndexNeuroCache.h>
 #include <faiss/impl/Panorama.h>
 #include <faiss/impl/PanoramaStats.h>
 
@@ -537,6 +542,11 @@ void gpu_sync_all_devices()
 %include  <faiss/IndexNeuroDropoutEnsemble.h>
 %include  <faiss/IndexNeuroMissingValue.h>
 %include  <faiss/IndexNeuroInhibition.h>
+%include  <faiss/IndexNeuroWeighted.h>
+%include  <faiss/IndexNeuroContextualWeighted.h>
+%include  <faiss/IndexNeuroParallelVoting.h>
+%include  <faiss/IndexNeuroCoarseToFine.h>
+%include  <faiss/IndexNeuroCache.h>
 %include  <faiss/IndexLSH.h>
 %include  <faiss/impl/PolysemousTraining.h>
 %include  <faiss/IndexPQ.h>

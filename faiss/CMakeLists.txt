@@ -55,6 +55,11 @@ set(FAISS_SRC
   IndexNeuroDropoutEnsemble.cpp
   IndexNeuroMissingValue.cpp
   IndexNeuroInhibition.cpp
+  IndexNeuroWeighted.cpp
+  IndexNeuroContextualWeighted.cpp
+  IndexNeuroParallelVoting.cpp
+  IndexNeuroCoarseToFine.cpp
+  IndexNeuroCache.cpp
   MatrixStats.cpp
   MetaIndexes.cpp
   VectorTransform.cpp
@@ -162,6 +167,11 @@ set(FAISS_HEADERS
   IndexNeuroDropoutEnsemble.h
   IndexNeuroMissingValue.h
   IndexNeuroInhibition.h
+  IndexNeuroWeighted.h
+  IndexNeuroContextualWeighted.h
+  IndexNeuroParallelVoting.h
+  IndexNeuroCoarseToFine.h
+  IndexNeuroCache.h
   IndexLattice.h
   IndexNNDescent.h
   IndexNSG.h

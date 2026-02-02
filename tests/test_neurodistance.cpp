@@ -18,6 +18,11 @@
 #include <faiss/IndexNeuroDropoutEnsemble.h>
 #include <faiss/IndexNeuroMissingValue.h>
 #include <faiss/IndexNeuroInhibition.h>
+#include <faiss/IndexNeuroWeighted.h>
+#include <faiss/IndexNeuroContextualWeighted.h>
+#include <faiss/IndexNeuroParallelVoting.h>
+#include <faiss/IndexNeuroCoarseToFine.h>
+#include <faiss/IndexNeuroCache.h>
 #include <faiss/MetricType.h>
 #include <faiss/impl/NeuroDistance.h>
 #include <faiss/utils/distances.h>
@@ -1651,4 +1656,1226 @@ TEST(NeuroInhibition, DelegationWorks) {
     index.reset();
     EXPECT_EQ(index.ntotal, 0);
     EXPECT_EQ(inner.ntotal, 0);
+}
+
+// ============================================================
+// T12: PA-01 LearnedWeights Tests
+// ============================================================
+
+// PA-01 with uniform weights = identical to L2
+TEST(NeuroWeighted, UniformWeightsEqualsL2) {
+    int d = 16;
+    int nb = 200;
+    int nq = 10;
+    int k = 5;
+
+    std::vector<float> xb, xq;
+    generate_clustered_data(xb, xq, d, nb, nq, 10, 12001);
+
+    faiss::IndexFlat inner(d, faiss::METRIC_L2);
+    inner.add(nb, xb.data());
+
+    // Ground truth L2
+    std::vector<float> dist_gt(nq * k);
+    std::vector<faiss::idx_t> lab_gt(nq * k);
+    inner.search(nq, xq.data(), k, dist_gt.data(), lab_gt.data());
+
+    // PA-01 with default uniform weights
+    faiss::IndexNeuroWeighted index(&inner);
+    index.train(nb, xb.data());
+
+    std::vector<float> distances(nq * k);
+    std::vector<faiss::idx_t> labels(nq * k);
+    index.search(nq, xq.data(), k, distances.data(), labels.data());
+
+    for (int i = 0; i < nq * k; i++) {
+        EXPECT_EQ(labels[i], lab_gt[i]);
+        EXPECT_NEAR(distances[i], dist_gt[i], 1e-5);
+    }
+}
+
+// PA-01 feedback learns to distinguish discriminative from noise dims
+TEST(NeuroWeighted, FeedbackLearnsWeights) {
+    int d = 32;
+    int nb = 5000;
+    int n_clusters = 50;
+
+    // Generate data where first half of dimensions is noise,
+    // second half is discriminative
+    std::mt19937 rng(12002);
+    std::normal_distribution<float> noise(0.0f, 0.1f);
+    std::uniform_real_distribution<float> center_dist(0.0f, 10.0f);
+    std::uniform_int_distribution<int> cluster_pick(0, n_clusters - 1);
+
+    std::vector<float> centers(n_clusters * d);
+    for (int c = 0; c < n_clusters; c++) {
+        for (int j = 0; j < d; j++) {
+            if (j < d / 2) {
+                // First half: noise-like (same center for all clusters)
+                centers[c * d + j] = 5.0f;
+            } else {
+                // Second half: discriminative
+                centers[c * d + j] = center_dist(rng);
+            }
+        }
+    }
+
+    std::vector<float> xb(nb * d);
+    for (int i = 0; i < nb; i++) {
+        int c = cluster_pick(rng);
+        for (int j = 0; j < d; j++) {
+            xb[i * d + j] = centers[c * d + j] + noise(rng);
+        }
+    }
+
+    faiss::IndexFlat inner(d, faiss::METRIC_L2);
+    inner.add(nb, xb.data());
+
+    faiss::IndexNeuroWeighted index(&inner);
+    index.train(nb, xb.data());
+    index.learning_rate = 0.1f;
+    index.weight_decay = 0.995f;
+
+    // Run feedback iterations using triplets from same/different clusters
+    std::mt19937 fb_rng(12003);
+    for (int iter = 0; iter < 500; iter++) {
+        std::vector<float> queries(d);
+        std::vector<float> positives(d);
+        std::vector<float> negatives(d);
+
+        int cq = std::uniform_int_distribution<int>(0, n_clusters - 1)(fb_rng);
+        int cn = (cq + 1 + std::uniform_int_distribution<int>(
+                                  0, n_clusters - 2)(fb_rng)) %
+                n_clusters;
+
+        for (int j = 0; j < d; j++) {
+            queries[j] = centers[cq * d + j] + noise(fb_rng);
+            positives[j] = centers[cq * d + j] + noise(fb_rng);
+            negatives[j] = centers[cn * d + j] + noise(fb_rng);
+        }
+
+        index.feedback(1, queries.data(), positives.data(), negatives.data());
+    }
+
+    // Weights for discriminative dims (second half) should be higher
+    float avg_noise_weight = 0, avg_disc_weight = 0;
+    for (int j = 0; j < d / 2; j++)
+        avg_noise_weight += index.weights[j];
+    for (int j = d / 2; j < d; j++)
+        avg_disc_weight += index.weights[j];
+    avg_noise_weight /= (d / 2);
+    avg_disc_weight /= (d - d / 2);
+
+    EXPECT_GT(avg_disc_weight, avg_noise_weight)
+            << "Discriminative dim weights (" << avg_disc_weight
+            << ") should be > noise dim weights (" << avg_noise_weight << ")";
+
+    // The ratio should be meaningful (at least 1.5x)
+    EXPECT_GT(avg_disc_weight / avg_noise_weight, 1.5f)
+            << "Discriminative/noise weight ratio = "
+            << avg_disc_weight / avg_noise_weight
+            << " should be > 1.5";
+}
+
+// PA-01 weights converge (don't diverge to infinity)
+TEST(NeuroWeighted, WeightsConverge) {
+    int d = 16;
+    int nb = 200;
+
+    std::vector<float> xb, xq;
+    generate_clustered_data(xb, xq, d, nb, 10, 10, 12004);
+
+    faiss::IndexFlat inner(d, faiss::METRIC_L2);
+    inner.add(nb, xb.data());
+
+    faiss::IndexNeuroWeighted index(&inner);
+    index.train(nb, xb.data());
+    index.learning_rate = 0.1f;
+    index.weight_decay = 0.99f;
+
+    std::mt19937 rng(12005);
+    std::normal_distribution<float> noise(0.0f, 0.1f);
+
+    for (int iter = 0; iter < 2000; iter++) {
+        std::vector<float> q(d), p(d), n(d);
+        for (int j = 0; j < d; j++) {
+            q[j] = noise(rng);
+            p[j] = q[j] + noise(rng) * 0.1f;
+            n[j] = noise(rng);
+        }
+        index.feedback(1, q.data(), p.data(), n.data());
+    }
+
+    // All weights should be finite and positive
+    for (int j = 0; j < d; j++) {
+        EXPECT_TRUE(std::isfinite(index.weights[j]))
+                << "weight[" << j << "] = " << index.weights[j];
+        EXPECT_GE(index.weights[j], index.min_weight)
+                << "weight[" << j << "] should be >= min_weight";
+    }
+}
+
+// PA-01 save/load roundtrip
+TEST(NeuroWeighted, SaveLoadRoundtrip) {
+    int d = 16;
+    int nb = 100;
+
+    std::vector<float> xb, xq;
+    generate_clustered_data(xb, xq, d, nb, 5, 5, 12006);
+
+    faiss::IndexFlat inner(d, faiss::METRIC_L2);
+    inner.add(nb, xb.data());
+
+    faiss::IndexNeuroWeighted index(&inner);
+    index.train(nb, xb.data());
+
+    // Modify weights via feedback
+    std::mt19937 rng(12007);
+    std::normal_distribution<float> noise(0.0f, 0.1f);
+    for (int iter = 0; iter < 50; iter++) {
+        std::vector<float> q(d), p(d), n(d);
+        for (int j = 0; j < d; j++) {
+            q[j] = noise(rng);
+            p[j] = q[j] + noise(rng) * 0.1f;
+            n[j] = noise(rng);
+        }
+        index.feedback(1, q.data(), p.data(), n.data());
+    }
+
+    auto weights_before = index.weights;
+    int fc_before = index.feedback_count;
+
+    // Save
+    const char* fname = "/tmp/neuro_weights_test.bin";
+    index.save_weights(fname);
+
+    // Reset and load
+    index.train(nb, xb.data()); // resets to uniform
+    EXPECT_EQ(index.feedback_count, 0);
+
+    index.load_weights(fname);
+    EXPECT_EQ(index.feedback_count, fc_before);
+
+    for (int j = 0; j < d; j++) {
+        EXPECT_NEAR(index.weights[j], weights_before[j], 1e-6)
+                << "weight[" << j << "] mismatch after load";
+    }
+
+    // Clean up
+    std::remove(fname);
+}
+
+// PA-01 returns valid results with non-uniform weights
+TEST(NeuroWeighted, NonUniformWeightsValid) {
+    int d = 16;
+    int nb = 500;
+    int nq = 10;
+    int k = 5;
+
+    std::vector<float> xb, xq;
+    generate_clustered_data(xb, xq, d, nb, nq, 10, 12008);
+
+    faiss::IndexFlat inner(d, faiss::METRIC_L2);
+    inner.add(nb, xb.data());
+
+    faiss::IndexNeuroWeighted index(&inner);
+    index.train(nb, xb.data());
+
+    // Manually set non-uniform weights
+    for (int j = 0; j < d; j++) {
+        index.weights[j] = 0.5f + 1.5f * j / d;
+    }
+
+    std::vector<float> distances(nq * k);
+    std::vector<faiss::idx_t> labels(nq * k);
+    index.search(nq, xq.data(), k, distances.data(), labels.data());
+
+    for (int i = 0; i < nq * k; i++) {
+        EXPECT_GE(labels[i], 0);
+        EXPECT_LT(labels[i], nb);
+        EXPECT_GE(distances[i], 0.0f);
+    }
+
+    // Results sorted
+    for (int q = 0; q < nq; q++) {
+        for (int j = 1; j < k; j++) {
+            EXPECT_LE(distances[q * k + j - 1], distances[q * k + j]);
+        }
+    }
+}
+
+// PA-01 params override weights per query
+TEST(NeuroWeighted, ParamsOverrideWeights) {
+    int d = 8;
+    int nb = 100;
+    int nq = 5;
+    int k = 3;
+
+    std::mt19937 rng(12009);
+    std::uniform_real_distribution<float> dist(0.0f, 1.0f);
+
+    std::vector<float> xb(nb * d), xq(nq * d);
+    for (auto& v : xb)
+        v = dist(rng);
+    for (auto& v : xq)
+        v = dist(rng);
+
+    faiss::IndexFlat inner(d, faiss::METRIC_L2);
+    inner.add(nb, xb.data());
+
+    faiss::IndexNeuroWeighted index(&inner);
+    index.train(nb, xb.data());
+
+    // Override: weight only first dimension
+    faiss::NeuroWeightedParams params;
+    params.weights.assign(d, 0.0f);
+    params.weights[0] = 1.0f;
+
+    std::vector<float> distances(nq * k);
+    std::vector<faiss::idx_t> labels(nq * k);
+    index.search(nq, xq.data(), k, distances.data(), labels.data(), &params);
+
+    // Results should be valid
+    for (int i = 0; i < nq * k; i++) {
+        EXPECT_GE(labels[i], 0);
+        EXPECT_LT(labels[i], nb);
+    }
+}
+
+// ============================================================
+// T13: PA-02 ContextualWeights Tests
+// ============================================================
+
+// PA-02 with uniform weights = identical to L2 (same as PA-01)
+TEST(NeuroContextual, UniformWeightsEqualsL2) {
+    int d = 16;
+    int nb = 200;
+    int nq = 10;
+    int k = 5;
+
+    std::vector<float> xb, xq;
+    generate_clustered_data(xb, xq, d, nb, nq, 10, 13001);
+
+    faiss::IndexFlat inner(d, faiss::METRIC_L2);
+    inner.add(nb, xb.data());
+
+    // Ground truth L2
+    std::vector<float> dist_gt(nq * k);
+    std::vector<faiss::idx_t> lab_gt(nq * k);
+    inner.search(nq, xq.data(), k, dist_gt.data(), lab_gt.data());
+
+    // PA-02 with default uniform weights (all clusters have w=1.0)
+    faiss::IndexNeuroContextualWeighted index(&inner, 3);
+    index.train(nq, xq.data()); // cluster the queries
+
+    std::vector<float> distances(nq * k);
+    std::vector<faiss::idx_t> labels(nq * k);
+    index.search(nq, xq.data(), k, distances.data(), labels.data());
+
+    for (int i = 0; i < nq * k; i++) {
+        EXPECT_EQ(labels[i], lab_gt[i]);
+        EXPECT_NEAR(distances[i], dist_gt[i], 1e-5);
+    }
+}
+
+// PA-02 classifies queries to correct clusters
+TEST(NeuroContextual, QueryClassification) {
+    int d = 16;
+    int nb = 200;
+    int n_clusters = 4;
+
+    // Generate well-separated query clusters
+    std::mt19937 rng(13002);
+    std::normal_distribution<float> noise(0.0f, 0.1f);
+
+    std::vector<float> train_queries(n_clusters * 50 * d);
+    for (int c = 0; c < n_clusters; c++) {
+        float offset = c * 100.0f; // well separated
+        for (int i = 0; i < 50; i++) {
+            for (int j = 0; j < d; j++) {
+                train_queries[(c * 50 + i) * d + j] = offset + noise(rng);
+            }
+        }
+    }
+
+    faiss::IndexFlat inner(d, faiss::METRIC_L2);
+    std::vector<float> xb(nb * d);
+    std::uniform_real_distribution<float> dist(0.0f, 1.0f);
+    for (auto& v : xb)
+        v = dist(rng);
+    inner.add(nb, xb.data());
+
+    faiss::IndexNeuroContextualWeighted index(&inner, n_clusters);
+    index.train(n_clusters * 50, train_queries.data());
+
+    // Queries near cluster 0 (offset=0)
+    std::vector<float> q0(d);
+    for (int j = 0; j < d; j++)
+        q0[j] = noise(rng);
+    int c0 = index.classify_query(q0.data());
+
+    // Queries near cluster 2 (offset=200)
+    std::vector<float> q2(d);
+    for (int j = 0; j < d; j++)
+        q2[j] = 200.0f + noise(rng);
+    int c2 = index.classify_query(q2.data());
+
+    // They should be assigned to different clusters
+    EXPECT_NE(c0, c2);
+    EXPECT_GE(c0, 0);
+    EXPECT_LT(c0, n_clusters);
+    EXPECT_GE(c2, 0);
+    EXPECT_LT(c2, n_clusters);
+}
+
+// PA-02 feedback updates per-cluster weights independently
+TEST(NeuroContextual, FeedbackUpdatesPerCluster) {
+    int d = 16;
+    int nb = 200;
+    int n_clusters = 2;
+
+    std::mt19937 rng(13003);
+    std::normal_distribution<float> noise(0.0f, 0.1f);
+
+    // Two well-separated query clusters
+    int nq_train = n_clusters * 50;
+    std::vector<float> train_queries(nq_train * d);
+    for (int c = 0; c < n_clusters; c++) {
+        float offset = c * 100.0f;
+        for (int i = 0; i < 50; i++) {
+            for (int j = 0; j < d; j++) {
+                train_queries[(c * 50 + i) * d + j] = offset + noise(rng);
+            }
+        }
+    }
+
+    std::vector<float> xb(nb * d);
+    std::uniform_real_distribution<float> dist(0.0f, 1.0f);
+    for (auto& v : xb)
+        v = dist(rng);
+
+    faiss::IndexFlat inner(d, faiss::METRIC_L2);
+    inner.add(nb, xb.data());
+
+    faiss::IndexNeuroContextualWeighted index(&inner, n_clusters);
+    index.train(nq_train, train_queries.data());
+    index.learning_rate = 0.2f;
+
+    // Record initial weights (all 1.0)
+    auto weights_before = index.cluster_weights;
+
+    // Feedback with queries near cluster 0 only
+    for (int iter = 0; iter < 100; iter++) {
+        std::vector<float> q(d), p(d), n(d);
+        for (int j = 0; j < d; j++) {
+            q[j] = noise(rng);
+            p[j] = q[j] + noise(rng) * 0.1f;
+            n[j] = noise(rng) + 50.0f; // far away
+        }
+        index.feedback(1, q.data(), p.data(), n.data());
+    }
+
+    // Cluster 0 weights should have changed
+    int c0 = index.classify_query(train_queries.data()); // first query -> cluster
+    bool c0_changed = false;
+    for (int j = 0; j < d; j++) {
+        if (std::abs(index.cluster_weights[c0 * d + j] -
+                     weights_before[c0 * d + j]) > 1e-6) {
+            c0_changed = true;
+            break;
+        }
+    }
+    EXPECT_TRUE(c0_changed) << "Cluster weights should change after feedback";
+
+    // Both clusters should have been trained (feedback_counts > 0 for at least one)
+    bool any_trained = false;
+    for (int c = 0; c < n_clusters; c++) {
+        if (index.feedback_counts[c] > 0) {
+            any_trained = true;
+            break;
+        }
+    }
+    EXPECT_TRUE(any_trained);
+}
+
+// PA-02 returns valid results with multiple clusters
+TEST(NeuroContextual, MultiClusterValidResults) {
+    int d = 16;
+    int nb = 500;
+    int nq = 20;
+    int k = 5;
+
+    std::vector<float> xb, xq;
+    generate_clustered_data(xb, xq, d, nb, nq, 10, 13004);
+
+    faiss::IndexFlat inner(d, faiss::METRIC_L2);
+    inner.add(nb, xb.data());
+
+    faiss::IndexNeuroContextualWeighted index(&inner, 4);
+    index.train(nq, xq.data());
+
+    std::vector<float> distances(nq * k);
+    std::vector<faiss::idx_t> labels(nq * k);
+    index.search(nq, xq.data(), k, distances.data(), labels.data());
+
+    for (int i = 0; i < nq * k; i++) {
+        EXPECT_GE(labels[i], 0);
+        EXPECT_LT(labels[i], nb);
+        EXPECT_GE(distances[i], 0.0f);
+    }
+
+    // Sorted by distance
+    for (int q = 0; q < nq; q++) {
+        for (int j = 1; j < k; j++) {
+            EXPECT_LE(distances[q * k + j - 1], distances[q * k + j]);
+        }
+    }
+}
+
+// PA-02 force_cluster param works
+TEST(NeuroContextual, ForceClusterParam) {
+    int d = 8;
+    int nb = 100;
+    int nq = 5;
+    int k = 3;
+
+    std::mt19937 rng(13005);
+    std::uniform_real_distribution<float> dist(0.0f, 1.0f);
+
+    std::vector<float> xb(nb * d), xq(nq * d);
+    for (auto& v : xb)
+        v = dist(rng);
+    for (auto& v : xq)
+        v = dist(rng);
+
+    faiss::IndexFlat inner(d, faiss::METRIC_L2);
+    inner.add(nb, xb.data());
+
+    faiss::IndexNeuroContextualWeighted index(&inner, 3);
+    index.train(nq, xq.data());
+
+    // Manually set different weights per cluster
+    for (int c = 0; c < 3; c++) {
+        for (int j = 0; j < d; j++) {
+            index.cluster_weights[c * d + j] = (c == 0) ? 1.0f : 0.01f;
+        }
+    }
+
+    // Force cluster 0 (high weights)
+    faiss::NeuroContextualParams params0;
+    params0.force_cluster = 0;
+    std::vector<float> d0(nq * k);
+    std::vector<faiss::idx_t> l0(nq * k);
+    index.search(nq, xq.data(), k, d0.data(), l0.data(), &params0);
+
+    // Force cluster 1 (low weights)
+    faiss::NeuroContextualParams params1;
+    params1.force_cluster = 1;
+    std::vector<float> d1(nq * k);
+    std::vector<faiss::idx_t> l1(nq * k);
+    index.search(nq, xq.data(), k, d1.data(), l1.data(), &params1);
+
+    // Distances with cluster 0 (w=1.0) should be larger than cluster 1 (w=0.01)
+    // for the same queries
+    float sum_d0 = 0, sum_d1 = 0;
+    for (int i = 0; i < nq * k; i++) {
+        sum_d0 += d0[i];
+        sum_d1 += d1[i];
+    }
+    EXPECT_GT(sum_d0, sum_d1)
+            << "Cluster 0 (w=1.0) distances should be > Cluster 1 (w=0.01)";
+}
+
+// ============================================================
+// T14: MR-03 ContrastiveLearning Tests
+// ============================================================
+
+// MR-03 contrastive converges faster than basic Hebbian
+TEST(NeuroContrastive, FasterConvergence) {
+    int d = 32;
+    int n_clusters = 50;
+
+    // Generate data where first half = noise, second half = discriminative
+    std::mt19937 rng(14001);
+    std::normal_distribution<float> noise(0.0f, 0.1f);
+    std::uniform_real_distribution<float> center_dist(0.0f, 10.0f);
+
+    std::vector<float> centers(n_clusters * d);
+    for (int c = 0; c < n_clusters; c++) {
+        for (int j = 0; j < d; j++) {
+            if (j < d / 2) {
+                centers[c * d + j] = 5.0f; // noise (same for all)
+            } else {
+                centers[c * d + j] = center_dist(rng);
+            }
+        }
+    }
+
+    int nb = 2000;
+    std::uniform_int_distribution<int> cluster_pick(0, n_clusters - 1);
+    std::vector<float> xb(nb * d);
+    for (int i = 0; i < nb; i++) {
+        int c = cluster_pick(rng);
+        for (int j = 0; j < d; j++)
+            xb[i * d + j] = centers[c * d + j] + noise(rng);
+    }
+
+    faiss::IndexFlat inner(d, faiss::METRIC_L2);
+    inner.add(nb, xb.data());
+
+    // Train both methods for the same number of iterations
+    int n_iters = 200;
+
+    // Basic Hebbian (PA-01)
+    faiss::IndexNeuroWeighted hebbian(&inner);
+    hebbian.train(nb, xb.data());
+    hebbian.learning_rate = 0.1f;
+    hebbian.weight_decay = 0.995f;
+
+    // Contrastive (MR-03)
+    faiss::IndexNeuroWeighted contrastive(&inner);
+    contrastive.train(nb, xb.data());
+    contrastive.learning_rate = 0.1f;
+    contrastive.weight_decay = 0.995f;
+
+    std::mt19937 fb_rng1(14002), fb_rng2(14002); // same seed for fair comparison
+
+    for (int iter = 0; iter < n_iters; iter++) {
+        int cq = std::uniform_int_distribution<int>(0, n_clusters - 1)(fb_rng1);
+        int cn = (cq + 1 + std::uniform_int_distribution<int>(
+                                  0, n_clusters - 2)(fb_rng1)) %
+                n_clusters;
+
+        std::vector<float> q(d), p(d), n(d);
+        for (int j = 0; j < d; j++) {
+            q[j] = centers[cq * d + j] + noise(fb_rng1);
+            p[j] = centers[cq * d + j] + noise(fb_rng1);
+            n[j] = centers[cn * d + j] + noise(fb_rng1);
+        }
+        hebbian.feedback(1, q.data(), p.data(), n.data());
+    }
+
+    for (int iter = 0; iter < n_iters; iter++) {
+        int cq = std::uniform_int_distribution<int>(0, n_clusters - 1)(fb_rng2);
+        int cn = (cq + 1 + std::uniform_int_distribution<int>(
+                                  0, n_clusters - 2)(fb_rng2)) %
+                n_clusters;
+
+        std::vector<float> q(d), p(d), n(d);
+        for (int j = 0; j < d; j++) {
+            q[j] = centers[cq * d + j] + noise(fb_rng2);
+            p[j] = centers[cq * d + j] + noise(fb_rng2);
+            n[j] = centers[cn * d + j] + noise(fb_rng2);
+        }
+        contrastive.feedback_contrastive(
+                1, q.data(), p.data(), n.data(), 1, 1.0f);
+    }
+
+    // Measure weight discrimination ratio for both
+    auto ratio = [&](const std::vector<float>& w) {
+        float avg_noise = 0, avg_disc = 0;
+        for (int j = 0; j < d / 2; j++)
+            avg_noise += w[j];
+        for (int j = d / 2; j < d; j++)
+            avg_disc += w[j];
+        avg_noise /= (d / 2);
+        avg_disc /= (d - d / 2);
+        return avg_disc / std::max(avg_noise, 0.001f);
+    };
+
+    float ratio_hebbian = ratio(hebbian.weights);
+    float ratio_contrastive = ratio(contrastive.weights);
+
+    // Contrastive should achieve better discrimination ratio
+    EXPECT_GT(ratio_contrastive, ratio_hebbian)
+            << "Contrastive ratio=" << ratio_contrastive
+            << " should be > Hebbian ratio=" << ratio_hebbian;
+}
+
+// MR-03 with multiple negatives (hard negative mining)
+TEST(NeuroContrastive, HardNegativeMining) {
+    int d = 16;
+    int nb = 200;
+
+    std::mt19937 rng(14003);
+    std::normal_distribution<float> noise(0.0f, 0.1f);
+    std::uniform_real_distribution<float> dist(0.0f, 1.0f);
+
+    std::vector<float> xb(nb * d);
+    for (auto& v : xb)
+        v = dist(rng);
+
+    faiss::IndexFlat inner(d, faiss::METRIC_L2);
+    inner.add(nb, xb.data());
+
+    faiss::IndexNeuroWeighted index(&inner);
+    index.train(nb, xb.data());
+    index.learning_rate = 0.1f;
+
+    // Provide 5 negatives per query - the hardest should be selected
+    int n_neg = 5;
+    for (int iter = 0; iter < 100; iter++) {
+        std::vector<float> q(d), p(d), negs(n_neg * d);
+        for (int j = 0; j < d; j++) {
+            q[j] = dist(rng);
+            p[j] = q[j] + noise(rng) * 0.1f;
+        }
+        // First negative is hard (close to query)
+        for (int j = 0; j < d; j++) {
+            negs[j] = q[j] + noise(rng) * 0.5f; // close
+        }
+        // Others are easy (far from query)
+        for (int n = 1; n < n_neg; n++) {
+            for (int j = 0; j < d; j++) {
+                negs[n * d + j] = q[j] + 10.0f; // far
+            }
+        }
+        index.feedback_contrastive(
+                1, q.data(), p.data(), negs.data(), n_neg, 1.0f);
+    }
+
+    // Weights should be finite and positive
+    for (int j = 0; j < d; j++) {
+        EXPECT_TRUE(std::isfinite(index.weights[j]));
+        EXPECT_GE(index.weights[j], index.min_weight);
+    }
+
+    // Feedback count should reflect all iterations
+    EXPECT_EQ(index.feedback_count, 100);
+}
+
+// MR-03 weight stability: weights don't oscillate wildly
+TEST(NeuroContrastive, WeightStability) {
+    int d = 8;
+    int nb = 100;
+
+    std::mt19937 rng(14004);
+    std::uniform_real_distribution<float> dist(0.0f, 1.0f);
+    std::normal_distribution<float> noise(0.0f, 0.1f);
+
+    std::vector<float> xb(nb * d);
+    for (auto& v : xb)
+        v = dist(rng);
+
+    faiss::IndexFlat inner(d, faiss::METRIC_L2);
+    inner.add(nb, xb.data());
+
+    faiss::IndexNeuroWeighted index(&inner);
+    index.train(nb, xb.data());
+    index.learning_rate = 0.05f;
+    index.weight_decay = 0.99f;
+
+    // Run many iterations with consistent signal
+    for (int iter = 0; iter < 500; iter++) {
+        std::vector<float> q(d), p(d), n(d);
+        for (int j = 0; j < d; j++) {
+            q[j] = dist(rng);
+            p[j] = q[j] + noise(rng) * 0.1f;
+            n[j] = dist(rng);
+        }
+        index.feedback_contrastive(1, q.data(), p.data(), n.data());
+    }
+
+    auto weights_mid = index.weights;
+
+    // Run 50 more iterations
+    for (int iter = 0; iter < 50; iter++) {
+        std::vector<float> q(d), p(d), n(d);
+        for (int j = 0; j < d; j++) {
+            q[j] = dist(rng);
+            p[j] = q[j] + noise(rng) * 0.1f;
+            n[j] = dist(rng);
+        }
+        index.feedback_contrastive(1, q.data(), p.data(), n.data());
+    }
+
+    // Weights should not have changed dramatically (< 50% relative change)
+    for (int j = 0; j < d; j++) {
+        float relative_change = std::abs(index.weights[j] - weights_mid[j]) /
+                std::max(weights_mid[j], 0.01f);
+        EXPECT_LT(relative_change, 0.5f)
+                << "weight[" << j << "] changed too much: "
+                << weights_mid[j] << " -> " << index.weights[j];
+    }
+}
+
+// MR-03 margin_scale=0 behaves like basic Hebbian (but with hard neg)
+TEST(NeuroContrastive, ZeroMarginScaleLikeHebbian) {
+    int d = 8;
+    int nb = 100;
+
+    std::mt19937 rng(14005);
+    std::uniform_real_distribution<float> dist(0.0f, 1.0f);
+    std::normal_distribution<float> noise(0.0f, 0.1f);
+
+    std::vector<float> xb(nb * d);
+    for (auto& v : xb)
+        v = dist(rng);
+
+    faiss::IndexFlat inner(d, faiss::METRIC_L2);
+    inner.add(nb, xb.data());
+
+    faiss::IndexNeuroWeighted index(&inner);
+    index.train(nb, xb.data());
+    index.learning_rate = 0.1f;
+
+    // With margin_scale=0, contrastive reduces to sign-only updates (like Hebbian)
+    for (int iter = 0; iter < 50; iter++) {
+        std::vector<float> q(d), p(d), n(d);
+        for (int j = 0; j < d; j++) {
+            q[j] = dist(rng);
+            p[j] = q[j] + noise(rng) * 0.1f;
+            n[j] = dist(rng);
+        }
+        index.feedback_contrastive(
+                1, q.data(), p.data(), n.data(), 1, 0.0f);
+    }
+
+    // All weights should be finite, positive, and have been updated
+    bool any_changed = false;
+    for (int j = 0; j < d; j++) {
+        EXPECT_TRUE(std::isfinite(index.weights[j]));
+        EXPECT_GE(index.weights[j], index.min_weight);
+        if (std::abs(index.weights[j] - 1.0f) > 1e-6) {
+            any_changed = true;
+        }
+    }
+    EXPECT_TRUE(any_changed) << "Weights should change even with margin_scale=0";
+}
+
+// ============================================================
+// T15: PP-01 ParallelVoting Tests
+// ============================================================
+
+// PP-01 returns valid results
+TEST(NeuroParallelVoting, ReturnsValidResults) {
+    int d = 32;
+    int nb = 1000;
+    int nq = 10;
+    int k = 5;
+
+    std::vector<float> xb, xq;
+    generate_clustered_data(xb, xq, d, nb, nq, 20, 15001);
+
+    faiss::IndexFlat inner(d, faiss::METRIC_L2);
+    inner.add(nb, xb.data());
+
+    faiss::IndexNeuroParallelVoting index(&inner, 4);
+
+    std::vector<float> distances(nq * k);
+    std::vector<faiss::idx_t> labels(nq * k);
+    index.search(nq, xq.data(), k, distances.data(), labels.data());
+
+    for (int i = 0; i < nq * k; i++) {
+        EXPECT_GE(labels[i], 0);
+        EXPECT_LT(labels[i], nb);
+        EXPECT_GE(distances[i], 0.0f);
+    }
+
+    // Sorted by distance
+    for (int q = 0; q < nq; q++) {
+        for (int j = 1; j < k; j++) {
+            EXPECT_LE(distances[q * k + j - 1], distances[q * k + j]);
+        }
+    }
+}
+
+// PP-01 with full_rerank: recall >= 92%
+TEST(NeuroParallelVoting, FullRerankRecall) {
+    int d = 32;
+    int nb = 5000;
+    int nq = 100;
+    int k = 10;
+
+    std::vector<float> xb, xq;
+    generate_clustered_data(xb, xq, d, nb, nq, 50, 15002);
+
+    faiss::IndexFlat inner(d, faiss::METRIC_L2);
+    inner.add(nb, xb.data());
+
+    // Ground truth
+    std::vector<float> dist_gt(nq * k);
+    std::vector<faiss::idx_t> lab_gt(nq * k);
+    inner.search(nq, xq.data(), k, dist_gt.data(), lab_gt.data());
+
+    faiss::IndexNeuroParallelVoting index(&inner, 4);
+    index.integration = faiss::NEURO_INTEGRATE_FULL_RERANK;
+    index.top_k_per_group = 50;
+
+    std::vector<float> distances(nq * k);
+    std::vector<faiss::idx_t> labels(nq * k);
+    index.search(nq, xq.data(), k, distances.data(), labels.data());
+
+    float recall = compute_recall(labels.data(), lab_gt.data(), nq, k);
+    EXPECT_GE(recall, 0.92f)
+            << "ParallelVoting recall=" << recall << " (expected >= 0.92)";
+}
+
+// PP-01 all grouping methods valid
+TEST(NeuroParallelVoting, AllGroupingMethodsValid) {
+    int d = 16;
+    int nb = 500;
+    int nq = 5;
+    int k = 5;
+
+    std::vector<float> xb, xq;
+    generate_clustered_data(xb, xq, d, nb, nq, 10, 15003);
+
+    faiss::IndexFlat inner(d, faiss::METRIC_L2);
+    inner.add(nb, xb.data());
+
+    faiss::NeuroGroupingMethod methods[] = {
+            faiss::NEURO_GROUP_CONSECUTIVE,
+            faiss::NEURO_GROUP_INTERLEAVED};
+
+    for (auto method : methods) {
+        faiss::IndexNeuroParallelVoting index(&inner, 4);
+        index.grouping = method;
+        index.top_k_per_group = 30;
+
+        std::vector<float> distances(nq * k);
+        std::vector<faiss::idx_t> labels(nq * k);
+        index.search(nq, xq.data(), k, distances.data(), labels.data());
+
+        for (int i = 0; i < nq * k; i++) {
+            EXPECT_GE(labels[i], 0)
+                    << "method=" << static_cast<int>(method);
+            EXPECT_LT(labels[i], nb)
+                    << "method=" << static_cast<int>(method);
+        }
+    }
+}
+
+// PP-01 all integration methods valid
+TEST(NeuroParallelVoting, AllIntegrationMethodsValid) {
+    int d = 16;
+    int nb = 500;
+    int nq = 5;
+    int k = 5;
+
+    std::vector<float> xb, xq;
+    generate_clustered_data(xb, xq, d, nb, nq, 10, 15004);
+
+    faiss::IndexFlat inner(d, faiss::METRIC_L2);
+    inner.add(nb, xb.data());
+
+    faiss::NeuroIntegrationMethod methods[] = {
+            faiss::NEURO_INTEGRATE_VOTING,
+            faiss::NEURO_INTEGRATE_BORDA,
+            faiss::NEURO_INTEGRATE_MEAN_DIST,
+            faiss::NEURO_INTEGRATE_FULL_RERANK};
+
+    for (auto method : methods) {
+        faiss::IndexNeuroParallelVoting index(&inner, 4);
+        index.integration = method;
+        index.top_k_per_group = 30;
+
+        std::vector<float> distances(nq * k);
+        std::vector<faiss::idx_t> labels(nq * k);
+        index.search(nq, xq.data(), k, distances.data(), labels.data());
+
+        for (int i = 0; i < nq * k; i++) {
+            EXPECT_GE(labels[i], 0)
+                    << "method=" << static_cast<int>(method);
+            EXPECT_LT(labels[i], nb)
+                    << "method=" << static_cast<int>(method);
+        }
+    }
+}
+
+// ============================================================
+// T16: PP-02 CoarseToFine Tests
+// ============================================================
+
+// PP-02 returns valid results after train()
+TEST(NeuroCoarseToFine, ReturnsValidResults) {
+    int d = 32;
+    int nb = 1000;
+    int nq = 10;
+    int k = 5;
+
+    std::vector<float> xb, xq;
+    generate_clustered_data(xb, xq, d, nb, nq, 20, 16001);
+
+    faiss::IndexFlat inner(d, faiss::METRIC_L2);
+    inner.add(nb, xb.data());
+
+    faiss::IndexNeuroCoarseToFine index(&inner, 3);
+    index.train(nb, xb.data());
+
+    std::vector<float> distances(nq * k);
+    std::vector<faiss::idx_t> labels(nq * k);
+    index.search(nq, xq.data(), k, distances.data(), labels.data());
+
+    for (int i = 0; i < nq * k; i++) {
+        EXPECT_GE(labels[i], 0);
+        EXPECT_LT(labels[i], nb);
+        EXPECT_GE(distances[i], 0.0f);
+    }
+
+    // Sorted
+    for (int q = 0; q < nq; q++) {
+        for (int j = 1; j < k; j++) {
+            EXPECT_LE(distances[q * k + j - 1], distances[q * k + j]);
+        }
+    }
+}
+
+// PP-02 recall >= 88%
+TEST(NeuroCoarseToFine, RecallAtLeast88Pct) {
+    int d = 32;
+    int nb = 5000;
+    int nq = 100;
+    int k = 10;
+
+    std::vector<float> xb, xq;
+    generate_clustered_data(xb, xq, d, nb, nq, 50, 16002);
+
+    faiss::IndexFlat inner(d, faiss::METRIC_L2);
+    inner.add(nb, xb.data());
+
+    // Ground truth
+    std::vector<float> dist_gt(nq * k);
+    std::vector<faiss::idx_t> lab_gt(nq * k);
+    inner.search(nq, xq.data(), k, dist_gt.data(), lab_gt.data());
+
+    faiss::IndexNeuroCoarseToFine index(&inner, 3);
+    index.cutoff_per_level = {0.5f, 0.7f, 1.0f}; // keep more candidates
+    index.train(nb, xb.data());
+
+    std::vector<float> distances(nq * k);
+    std::vector<faiss::idx_t> labels(nq * k);
+    index.search(nq, xq.data(), k, distances.data(), labels.data());
+
+    float recall = compute_recall(labels.data(), lab_gt.data(), nq, k);
+    EXPECT_GE(recall, 0.88f)
+            << "CoarseToFine recall=" << recall << " (expected >= 0.88)";
+}
+
+// PP-02 uses fewer calculations than brute force
+TEST(NeuroCoarseToFine, FewerCalculations) {
+    int d = 32;
+    int nb = 5000;
+    int nq = 1;
+    int k = 10;
+
+    std::vector<float> xb, xq;
+    generate_clustered_data(xb, xq, d, nb, nq, 50, 16003);
+
+    faiss::IndexFlat inner(d, faiss::METRIC_L2);
+    inner.add(nb, xb.data());
+
+    faiss::IndexNeuroCoarseToFine index(&inner, 3);
+    index.cutoff_per_level = {0.3f, 0.5f, 1.0f};
+    index.train(nb, xb.data());
+
+    faiss::NeuroCoarseToFineParams params;
+    params.collect_stats = true;
+
+    std::vector<float> distances(nq * k);
+    std::vector<faiss::idx_t> labels(nq * k);
+    index.search(nq, xq.data(), k, distances.data(), labels.data(), &params);
+
+    int64_t brute_force_calcs = (int64_t)nb * d;
+    EXPECT_LT(index.last_stats.calculations_performed, brute_force_calcs)
+            << "CoarseToFine should use fewer calculations: "
+            << index.last_stats.calculations_performed << " vs "
+            << brute_force_calcs;
+}
+
+// PP-02 with conservative cutoffs approaches brute force
+TEST(NeuroCoarseToFine, ConservativeCutoffHighRecall) {
+    int d = 16;
+    int nb = 200;
+    int nq = 10;
+    int k = 5;
+
+    std::vector<float> xb, xq;
+    generate_clustered_data(xb, xq, d, nb, nq, 10, 16004);
+
+    faiss::IndexFlat inner(d, faiss::METRIC_L2);
+    inner.add(nb, xb.data());
+
+    // Ground truth
+    std::vector<float> dist_gt(nq * k);
+    std::vector<faiss::idx_t> lab_gt(nq * k);
+    inner.search(nq, xq.data(), k, dist_gt.data(), lab_gt.data());
+
+    // Conservative: keep 90% at each level
+    faiss::IndexNeuroCoarseToFine index(&inner, 3);
+    index.cutoff_per_level = {0.9f, 0.95f, 1.0f};
+    index.train(nb, xb.data());
+
+    std::vector<float> distances(nq * k);
+    std::vector<faiss::idx_t> labels(nq * k);
+    index.search(nq, xq.data(), k, distances.data(), labels.data());
+
+    float recall = compute_recall(labels.data(), lab_gt.data(), nq, k);
+    EXPECT_GE(recall, 0.95f)
+            << "Conservative CoarseToFine recall=" << recall;
+}
+
+// ============================================================
+// T17: MR-02 ContextCache Tests
+// ============================================================
+
+// MR-02 returns valid results (no cache effect)
+TEST(NeuroCache, ReturnsValidResults) {
+    int d = 16;
+    int nb = 500;
+    int nq = 10;
+    int k = 5;
+
+    std::vector<float> xb, xq;
+    generate_clustered_data(xb, xq, d, nb, nq, 10, 17001);
+
+    faiss::IndexFlat inner(d, faiss::METRIC_L2);
+    inner.add(nb, xb.data());
+
+    faiss::IndexNeuroCache index(&inner);
+
+    std::vector<float> distances(nq * k);
+    std::vector<faiss::idx_t> labels(nq * k);
+    index.search(nq, xq.data(), k, distances.data(), labels.data());
+
+    for (int i = 0; i < nq * k; i++) {
+        EXPECT_GE(labels[i], 0);
+        EXPECT_LT(labels[i], nb);
+        EXPECT_GE(distances[i], 0.0f);
+    }
+}
+
+// MR-02 cache hits return same results
+TEST(NeuroCache, CacheHitsReturnSameResults) {
+    int d = 16;
+    int nb = 500;
+    int nq = 5;
+    int k = 5;
+
+    std::vector<float> xb, xq;
+    generate_clustered_data(xb, xq, d, nb, nq, 10, 17002);
+
+    faiss::IndexFlat inner(d, faiss::METRIC_L2);
+    inner.add(nb, xb.data());
+
+    faiss::IndexNeuroCache index(&inner);
+
+    // First search (cache miss)
+    std::vector<float> d1(nq * k);
+    std::vector<faiss::idx_t> l1(nq * k);
+    index.search(nq, xq.data(), k, d1.data(), l1.data());
+    EXPECT_EQ(index.cache_misses, nq);
+    EXPECT_EQ(index.cache_hits, 0);
+
+    // Second search (same queries -> cache hit)
+    std::vector<float> d2(nq * k);
+    std::vector<faiss::idx_t> l2(nq * k);
+    index.search(nq, xq.data(), k, d2.data(), l2.data());
+    EXPECT_EQ(index.cache_hits, nq);
+
+    // Results should be identical
+    for (int i = 0; i < nq * k; i++) {
+        EXPECT_EQ(l1[i], l2[i]);
+        EXPECT_NEAR(d1[i], d2[i], 1e-6);
+    }
+}
+
+// MR-02 cache invalidation on add()
+TEST(NeuroCache, InvalidationOnAdd) {
+    int d = 16;
+    int nb = 100;
+    int nq = 3;
+    int k = 3;
+
+    std::mt19937 rng(17003);
+    std::uniform_real_distribution<float> dist(0.0f, 1.0f);
+
+    std::vector<float> xb(nb * d), xq(nq * d);
+    for (auto& v : xb)
+        v = dist(rng);
+    for (auto& v : xq)
+        v = dist(rng);
+
+    faiss::IndexFlat inner(d, faiss::METRIC_L2);
+    inner.add(nb, xb.data());
+
+    faiss::IndexNeuroCache index(&inner);
+
+    // Search to populate cache
+    std::vector<float> distances(nq * k);
+    std::vector<faiss::idx_t> labels(nq * k);
+    index.search(nq, xq.data(), k, distances.data(), labels.data());
+    EXPECT_EQ(index.cache_misses, nq);
+
+    // Add more data -> cache should be invalidated
+    std::vector<float> xb2(10 * d);
+    for (auto& v : xb2)
+        v = dist(rng);
+    index.add(10, xb2.data());
+
+    // Search again -> should be cache miss (cache was cleared)
+    index.search(nq, xq.data(), k, distances.data(), labels.data());
+    // After clear, cache_misses was reset to 0, so it should be nq again
+    EXPECT_EQ(index.cache_misses, nq);
+    EXPECT_EQ(index.ntotal, nb + 10);
+}
+
+// MR-02 cache invalidation on reset()
+TEST(NeuroCache, InvalidationOnReset) {
+    int d = 8;
+    int nb = 50;
+
+    std::mt19937 rng(17004);
+    std::uniform_real_distribution<float> dist(0.0f, 1.0f);
+
+    std::vector<float> xb(nb * d);
+    for (auto& v : xb)
+        v = dist(rng);
+
+    faiss::IndexFlat inner(d, faiss::METRIC_L2);
+    inner.add(nb, xb.data());
+
+    faiss::IndexNeuroCache index(&inner);
+    EXPECT_EQ(index.ntotal, nb);
+
+    index.reset();
+    EXPECT_EQ(index.ntotal, 0);
+    EXPECT_EQ(inner.ntotal, 0);
+    EXPECT_FLOAT_EQ(index.hit_rate(), 0.0f);
+}
+
+// MR-02 hit_rate() works
+TEST(NeuroCache, HitRate) {
+    int d = 8;
+    int nb = 50;
+    int k = 3;
+
+    std::mt19937 rng(17005);
+    std::uniform_real_distribution<float> dist(0.0f, 1.0f);
+
+    std::vector<float> xb(nb * d), xq(d);
+    for (auto& v : xb)
+        v = dist(rng);
+    for (auto& v : xq)
+        v = dist(rng);
+
+    faiss::IndexFlat inner(d, faiss::METRIC_L2);
+    inner.add(nb, xb.data());
+
+    faiss::IndexNeuroCache index(&inner);
+
+    // First search: miss
+    std::vector<float> distances(k);
+    std::vector<faiss::idx_t> labels(k);
+    index.search(1, xq.data(), k, distances.data(), labels.data());
+    EXPECT_FLOAT_EQ(index.hit_rate(), 0.0f);
+
+    // Second search: hit
+    index.search(1, xq.data(), k, distances.data(), labels.data());
+    EXPECT_FLOAT_EQ(index.hit_rate(), 0.5f); // 1 hit, 1 miss
+
+    // Third search: hit
+    index.search(1, xq.data(), k, distances.data(), labels.data());
+    float expected = 2.0f / 3.0f; // 2 hits, 1 miss
+    EXPECT_NEAR(index.hit_rate(), expected, 1e-5);
 }
