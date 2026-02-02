@@ -171,6 +171,11 @@ typedef uint64_t size_t;
 #include <faiss/impl/ProductAdditiveQuantizer.h>
 #include <faiss/impl/CodePacker.h>
 #include <faiss/utils/NeuralNet.h>
+#include <faiss/impl/NeuroDistance.h>
+#include <faiss/IndexNeuroElimination.h>
+#include <faiss/IndexNeuroDropoutEnsemble.h>
+#include <faiss/IndexNeuroMissingValue.h>
+#include <faiss/IndexNeuroInhibition.h>
 #include <faiss/impl/Panorama.h>
 #include <faiss/impl/PanoramaStats.h>
 
@@ -527,6 +532,11 @@ void gpu_sync_all_devices()
 %include  <faiss/VectorTransform.h>
 %include  <faiss/IndexPreTransform.h>
 %include  <faiss/IndexRefine.h>
+%include  <faiss/impl/NeuroDistance.h>
+%include  <faiss/IndexNeuroElimination.h>
+%include  <faiss/IndexNeuroDropoutEnsemble.h>
+%include  <faiss/IndexNeuroMissingValue.h>
+%include  <faiss/IndexNeuroInhibition.h>
 %include  <faiss/IndexLSH.h>
 %include  <faiss/impl/PolysemousTraining.h>
 %include  <faiss/IndexPQ.h>

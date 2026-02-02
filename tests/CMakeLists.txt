@@ -42,6 +42,7 @@ set(FAISS_TEST_SRC
   test_scalar_quantizer.cpp
   test_factory_tools.cpp
   test_custom_result_handler.cpp
+  test_neurodistance.cpp
 )
 
 if(FAISS_ENABLE_SVS)

@@ -189,6 +189,42 @@ inline float VectorDistance<METRIC_GOWER>::operator()(
     return accu / valid_dims;
 }
 
+/// NeuroDistance: Weighted L2 distance
+/// For now uses uniform weights (equivalent to L2). When used with
+/// IndexNeuroWeighted, weights are applied at the search level.
+template <>
+inline float VectorDistance<METRIC_NEURO_WEIGHTED_L2>::operator()(
+        const float* x,
+        const float* y) const {
+    return fvec_L2sqr(x, y, d);
+}
+
+/// NeuroDistance: NaN-aware weighted L2 distance
+/// Skips NaN dimensions and renormalizes by present count.
+/// Weight reduction: effective_weight = (1 - missing_rate)^2
+template <>
+inline float VectorDistance<METRIC_NEURO_NAN_WEIGHTED>::operator()(
+        const float* x,
+        const float* y) const {
+    float accu = 0;
+    size_t present = 0;
+    for (size_t i = 0; i < d; i++) {
+        if (!std::isnan(x[i]) && !std::isnan(y[i])) {
+            float diff = x[i] - y[i];
+            accu += diff * diff;
+            present++;
+        }
+    }
+    if (present == 0) {
+        return NAN;
+    }
+    // Renormalize: scale by d/present to account for missing dimensions
+    // Then apply quadratic weight reduction
+    float missing_rate = 1.0f - float(present) / float(d);
+    float weight = (1.0f - missing_rate) * (1.0f - missing_rate);
+    return (float(d) / float(present)) * accu * weight;
+}
+
 /***************************************************************************
  * Dispatching function that takes a metric type and a consumer object
  * the consumer object should contain a return type T and a operation template
@@ -220,6 +256,8 @@ typename Consumer::T dispatch_VectorDistance(
         DISPATCH_VD(METRIC_Jaccard);
         DISPATCH_VD(METRIC_NaNEuclidean);
         DISPATCH_VD(METRIC_GOWER);
+        DISPATCH_VD(METRIC_NEURO_WEIGHTED_L2);
+        DISPATCH_VD(METRIC_NEURO_NAN_WEIGHTED);
         default:
             FAISS_THROW_FMT("Invalid metric %d", metric);
     }

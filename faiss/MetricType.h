@@ -41,6 +41,12 @@ enum MetricType {
     /// Gower's distance - numeric dimensions are in [0,1] and categorical
     /// dimensions are negative integers
     METRIC_GOWER,
+
+    /// NeuroDistance: bio-inspired distance strategies
+    /// Weighted L2 distance with per-dimension weights
+    METRIC_NEURO_WEIGHTED_L2 = 100,
+    /// Missing-value-aware weighted L2 (handles NaN with weight reduction)
+    METRIC_NEURO_NAN_WEIGHTED,
 };
 
 /// all vector indices are this type
@@ -89,6 +95,10 @@ inline auto with_metric_type(MetricType metric, LambdaType&& action) {
             return action.template operator()<METRIC_NaNEuclidean>();
         case METRIC_GOWER:
             return action.template operator()<METRIC_GOWER>();
+        case METRIC_NEURO_WEIGHTED_L2:
+            return action.template operator()<METRIC_NEURO_WEIGHTED_L2>();
+        case METRIC_NEURO_NAN_WEIGHTED:
+            return action.template operator()<METRIC_NEURO_NAN_WEIGHTED>();
         default: {
             fprintf(stderr,
                     "FATAL ERROR: with_metric_type called with unknown "

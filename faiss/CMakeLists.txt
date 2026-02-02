@@ -51,6 +51,10 @@ set(FAISS_SRC
   IndexShards.cpp
   IndexShardsIVF.cpp
   IndexNeuralNetCodec.cpp
+  IndexNeuroElimination.cpp
+  IndexNeuroDropoutEnsemble.cpp
+  IndexNeuroMissingValue.cpp
+  IndexNeuroInhibition.cpp
   MatrixStats.cpp
   MetaIndexes.cpp
   VectorTransform.cpp
@@ -87,6 +91,7 @@ set(FAISS_SRC
   impl/residual_quantizer_encode_steps.cpp
   impl/zerocopy_io.cpp
   impl/NNDescent.cpp
+  impl/NeuroDistance.cpp
   impl/Panorama.cpp
   impl/PanoramaStats.cpp
   invlists/BlockInvertedLists.cpp
@@ -153,6 +158,10 @@ set(FAISS_HEADERS
   IndexIVFSpectralHash.h
   IndexLSH.h
   IndexNeuralNetCodec.h
+  IndexNeuroElimination.h
+  IndexNeuroDropoutEnsemble.h
+  IndexNeuroMissingValue.h
+  IndexNeuroInhibition.h
   IndexLattice.h
   IndexNNDescent.h
   IndexNSG.h
@@ -190,6 +199,7 @@ set(FAISS_HEADERS
   impl/LookupTableScaler.h
   impl/FastScanDistancePostProcessing.h
   impl/maybe_owned_vector.h
+  impl/NeuroDistance.h
   impl/NNDescent.h
   impl/NSG.h
   impl/Panorama.h
