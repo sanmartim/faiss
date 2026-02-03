@@ -216,6 +216,17 @@ typedef uint64_t size_t;
 #include <faiss/IndexNeuroHierarchicalDisk.h>
 #include <faiss/IndexNeuroCompressedDisk.h>
 #include <faiss/IndexNeuroSemanticSharding.h>
+#include <faiss/IndexNeuroMultiScaleSign.h>
+#include <faiss/IndexNeuroAdaptiveScale.h>
+#include <faiss/IndexNeuroHierarchicalScale.h>
+#include <faiss/IndexNeuroMultiScaleIntersection.h>
+#include <faiss/IndexNeuroLearnedScale.h>
+#include <faiss/IndexNeuroHammingPrefilter.h>
+#include <faiss/IndexNeuroCentroidBounds.h>
+#include <faiss/IndexNeuroProjectionCascade.h>
+#include <faiss/IndexNeuroStatisticalPrescreen.h>
+#include <faiss/IndexNeuroEnsembleVoting.h>
+#include <faiss/IndexNeuroRecommendedPipeline.h>
 #include <faiss/impl/Panorama.h>
 #include <faiss/impl/PanoramaStats.h>
 
@@ -644,6 +655,19 @@ void gpu_sync_all_devices()
 %include  <faiss/IndexNeuroHierarchicalDisk.h>
 %include  <faiss/IndexNeuroCompressedDisk.h>
 %include  <faiss/IndexNeuroSemanticSharding.h>
+%include  <faiss/IndexNeuroMultiScaleSign.h>
+%include  <faiss/IndexNeuroAdaptiveScale.h>
+%include  <faiss/IndexNeuroHierarchicalScale.h>
+// Ignore unordered_map member for SWIG
+%ignore faiss::IndexNeuroMultiScaleIntersection::buckets;
+%include  <faiss/IndexNeuroMultiScaleIntersection.h>
+%include  <faiss/IndexNeuroLearnedScale.h>
+%include  <faiss/IndexNeuroHammingPrefilter.h>
+%include  <faiss/IndexNeuroCentroidBounds.h>
+%include  <faiss/IndexNeuroProjectionCascade.h>
+%include  <faiss/IndexNeuroStatisticalPrescreen.h>
+%include  <faiss/IndexNeuroEnsembleVoting.h>
+%include  <faiss/IndexNeuroRecommendedPipeline.h>
 %include  <faiss/IndexIVFSpectralHash.h>
 %include  <faiss/IndexIVFAdditiveQuantizer.h>
 %include  <faiss/impl/HNSW.h>

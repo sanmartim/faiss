@@ -187,6 +187,117 @@ struct NeuroMetricJaccard : NeuroMetric {
     float distance(const float* x1, const float* x2, int d) const override;
 };
 
+/*************************************************************
+ * V4: Multi-Scale Sign (MS) Family Parameters
+ *
+ * Strategies using sign(tanh(x * scale)) at multiple scales
+ * for ultra-fast XOR-based candidate filtering.
+ *************************************************************/
+
+/// Parameters for MS-01: MultiScaleSign
+struct NeuroMultiScaleSignParams : NeuroSearchParameters {
+    std::vector<float> scales = {0.5f, 1.0f, 2.0f};  ///< scale factors
+    int max_hamming_distance = 0;  ///< 0 = auto (d/16 per scale)
+    bool use_intersection = true;  ///< require match on all scales
+
+    virtual ~NeuroMultiScaleSignParams() = default;
+};
+
+/// Parameters for MS-02: AdaptiveScale
+struct NeuroAdaptiveScaleParams : NeuroSearchParameters {
+    int num_scales = 3;
+    float min_entropy = 0.8f;  ///< minimum entropy threshold for thresholds
+    int sample_size = 10000;   ///< samples for threshold learning
+
+    virtual ~NeuroAdaptiveScaleParams() = default;
+};
+
+/// Parameters for MS-03: HierarchicalScale
+struct NeuroHierarchicalScaleParams : NeuroSearchParameters {
+    std::vector<float> cascade_scales = {0.25f, 0.5f, 1.0f, 2.0f, 4.0f};
+    std::vector<float> keep_ratios = {0.5f, 0.5f, 0.5f, 0.5f};
+    int target_candidates = 0;  ///< 0 = use all levels
+
+    virtual ~NeuroHierarchicalScaleParams() = default;
+};
+
+/// Parameters for MS-04: MultiScaleIntersection
+struct NeuroMultiScaleIntersectionParams : NeuroSearchParameters {
+    std::vector<float> scales = {0.5f, 1.0f, 2.0f};
+    bool strict_intersection = true;  ///< exact match required
+    int fallback_k = 100;  ///< fallback candidates if bucket empty
+
+    virtual ~NeuroMultiScaleIntersectionParams() = default;
+};
+
+/// Parameters for MS-05: LearnedScale
+struct NeuroLearnedScaleParams : NeuroSearchParameters {
+    int num_scales = 5;
+    int search_iterations = 100;  ///< random search iterations
+    int validation_queries = 1000;
+    int validation_k = 10;
+
+    virtual ~NeuroLearnedScaleParams() = default;
+};
+
+/*************************************************************
+ * V4: Fast-Slow (FS) Family Parameters
+ *
+ * Kahneman-inspired System 1 (cheap) / System 2 (precise) filtering.
+ *************************************************************/
+
+/// Parameters for FS-01: HammingPrefilter
+struct NeuroHammingPrefilterParams : NeuroSearchParameters {
+    float keep_ratio = 0.10f;  ///< keep top 10% by Hamming distance
+    int max_hamming_bits = 0;  ///< 0 = auto (d/4)
+
+    virtual ~NeuroHammingPrefilterParams() = default;
+};
+
+/// Parameters for FS-02: CentroidBounds
+struct NeuroCentroidBoundsParams : NeuroSearchParameters {
+    int nlist = 1000;  ///< number of clusters
+    int nprobe = 10;   ///< clusters to search
+    bool use_triangle_inequality = true;
+
+    virtual ~NeuroCentroidBoundsParams() = default;
+};
+
+/// Parameters for FS-03: ProjectionCascade
+struct NeuroProjectionCascadeParams : NeuroSearchParameters {
+    std::vector<int> projection_dims = {8, 32, 128};
+    std::vector<float> keep_ratios = {0.10f, 0.10f, 0.10f};
+
+    virtual ~NeuroProjectionCascadeParams() = default;
+};
+
+/// Parameters for FS-04: StatisticalPrescreen
+struct NeuroStatisticalPrescreenParams : NeuroSearchParameters {
+    float keep_ratio = 0.20f;  ///< keep top 20%
+    float norm_weight = 1.0f;
+    float mean_weight = 1.0f;
+
+    virtual ~NeuroStatisticalPrescreenParams() = default;
+};
+
+/// Parameters for FS-05: EnsembleVoting
+struct NeuroEnsembleVotingParams : NeuroSearchParameters {
+    int min_votes = 2;
+    bool use_hamming = true;
+    bool use_stats = true;
+    bool use_projection = true;
+
+    virtual ~NeuroEnsembleVotingParams() = default;
+};
+
+/// Parameters for FS-06: RecommendedPipeline
+struct NeuroRecommendedPipelineParams : NeuroSearchParameters {
+    float ms_keep_ratio = 0.15f;  ///< after MS stage
+    float fs_keep_ratio = 0.05f;  ///< after FS stage (before L2)
+
+    virtual ~NeuroRecommendedPipelineParams() = default;
+};
+
 /** Base class for all NeuroDistance index wrappers.
  *
  * Wraps an inner index (typically IndexFlat) and overrides search()

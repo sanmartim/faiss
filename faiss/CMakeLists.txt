@@ -95,6 +95,17 @@ set(FAISS_SRC
   IndexNeuroHierarchicalDisk.cpp
   IndexNeuroCompressedDisk.cpp
   IndexNeuroSemanticSharding.cpp
+  IndexNeuroMultiScaleSign.cpp
+  IndexNeuroAdaptiveScale.cpp
+  IndexNeuroHierarchicalScale.cpp
+  IndexNeuroMultiScaleIntersection.cpp
+  IndexNeuroLearnedScale.cpp
+  IndexNeuroHammingPrefilter.cpp
+  IndexNeuroCentroidBounds.cpp
+  IndexNeuroProjectionCascade.cpp
+  IndexNeuroStatisticalPrescreen.cpp
+  IndexNeuroEnsembleVoting.cpp
+  IndexNeuroRecommendedPipeline.cpp
   MatrixStats.cpp
   MetaIndexes.cpp
   VectorTransform.cpp
@@ -242,6 +253,17 @@ set(FAISS_HEADERS
   IndexNeuroHierarchicalDisk.h
   IndexNeuroCompressedDisk.h
   IndexNeuroSemanticSharding.h
+  IndexNeuroMultiScaleSign.h
+  IndexNeuroAdaptiveScale.h
+  IndexNeuroHierarchicalScale.h
+  IndexNeuroMultiScaleIntersection.h
+  IndexNeuroLearnedScale.h
+  IndexNeuroHammingPrefilter.h
+  IndexNeuroCentroidBounds.h
+  IndexNeuroProjectionCascade.h
+  IndexNeuroStatisticalPrescreen.h
+  IndexNeuroEnsembleVoting.h
+  IndexNeuroRecommendedPipeline.h
   IndexLattice.h
   IndexNNDescent.h
   IndexNSG.h
