@@ -235,7 +235,7 @@ void IndexNeuroCompressedDisk::search(
     }
     np = std::min(np, nlist);
 
-#pragma omp parallel for
+    // Note: Not parallelized due to shared decompression cache
     for (idx_t q = 0; q < n; q++) {
         const float* query = x + q * d;
 
