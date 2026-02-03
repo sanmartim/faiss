@@ -84,6 +84,17 @@ set(FAISS_SRC
   IndexNeuroBatchedQueries.cpp
   IndexNeuroDiskANN.cpp
   IndexNeuroOverlappingPartitions.cpp
+  IndexNeuroAdaptiveProbe.cpp
+  IndexNeuroPrefetchOptimized.cpp
+  IndexNeuroMultiResolutionBinary.cpp
+  IndexNeuroAdaptiveZones.cpp
+  IndexNeuroLearnedBinarization.cpp
+  IndexNeuroAdaptiveQuantization.cpp
+  IndexNeuroDynamicPartitions.cpp
+  IndexNeuroQueryCache.cpp
+  IndexNeuroHierarchicalDisk.cpp
+  IndexNeuroCompressedDisk.cpp
+  IndexNeuroSemanticSharding.cpp
   MatrixStats.cpp
   MetaIndexes.cpp
   VectorTransform.cpp
@@ -220,6 +231,17 @@ set(FAISS_HEADERS
   IndexNeuroBatchedQueries.h
   IndexNeuroDiskANN.h
   IndexNeuroOverlappingPartitions.h
+  IndexNeuroAdaptiveProbe.h
+  IndexNeuroPrefetchOptimized.h
+  IndexNeuroMultiResolutionBinary.h
+  IndexNeuroAdaptiveZones.h
+  IndexNeuroLearnedBinarization.h
+  IndexNeuroAdaptiveQuantization.h
+  IndexNeuroDynamicPartitions.h
+  IndexNeuroQueryCache.h
+  IndexNeuroHierarchicalDisk.h
+  IndexNeuroCompressedDisk.h
+  IndexNeuroSemanticSharding.h
   IndexLattice.h
   IndexNNDescent.h
   IndexNSG.h

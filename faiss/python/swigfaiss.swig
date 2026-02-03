@@ -205,6 +205,17 @@ typedef uint64_t size_t;
 #include <faiss/IndexNeuroBatchedQueries.h>
 #include <faiss/IndexNeuroDiskANN.h>
 #include <faiss/IndexNeuroOverlappingPartitions.h>
+#include <faiss/IndexNeuroAdaptiveProbe.h>
+#include <faiss/IndexNeuroPrefetchOptimized.h>
+#include <faiss/IndexNeuroMultiResolutionBinary.h>
+#include <faiss/IndexNeuroAdaptiveZones.h>
+#include <faiss/IndexNeuroLearnedBinarization.h>
+#include <faiss/IndexNeuroAdaptiveQuantization.h>
+#include <faiss/IndexNeuroDynamicPartitions.h>
+#include <faiss/IndexNeuroQueryCache.h>
+#include <faiss/IndexNeuroHierarchicalDisk.h>
+#include <faiss/IndexNeuroCompressedDisk.h>
+#include <faiss/IndexNeuroSemanticSharding.h>
 #include <faiss/impl/Panorama.h>
 #include <faiss/impl/PanoramaStats.h>
 
@@ -620,6 +631,19 @@ void gpu_sync_all_devices()
 %ignore faiss::IndexNeuroDiskANN::disk_file;
 %include  <faiss/IndexNeuroDiskANN.h>
 %include  <faiss/IndexNeuroOverlappingPartitions.h>
+%include  <faiss/IndexNeuroAdaptiveProbe.h>
+%include  <faiss/IndexNeuroPrefetchOptimized.h>
+%include  <faiss/IndexNeuroMultiResolutionBinary.h>
+%include  <faiss/IndexNeuroAdaptiveZones.h>
+%include  <faiss/IndexNeuroLearnedBinarization.h>
+%include  <faiss/IndexNeuroAdaptiveQuantization.h>
+%include  <faiss/IndexNeuroDynamicPartitions.h>
+// Ignore non-copyable mutex member
+%ignore faiss::IndexNeuroQueryCache::cache_mutex;
+%include  <faiss/IndexNeuroQueryCache.h>
+%include  <faiss/IndexNeuroHierarchicalDisk.h>
+%include  <faiss/IndexNeuroCompressedDisk.h>
+%include  <faiss/IndexNeuroSemanticSharding.h>
 %include  <faiss/IndexIVFSpectralHash.h>
 %include  <faiss/IndexIVFAdditiveQuantizer.h>
 %include  <faiss/impl/HNSW.h>
