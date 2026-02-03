@@ -181,6 +181,22 @@ typedef uint64_t size_t;
 #include <faiss/IndexNeuroParallelVoting.h>
 #include <faiss/IndexNeuroCoarseToFine.h>
 #include <faiss/IndexNeuroCache.h>
+#include <faiss/IndexNeuroHash.h>
+#include <faiss/IndexNeuroFlyHash.h>
+#include <faiss/IndexNeuroColumnHash.h>
+#include <faiss/IndexNeuroMushroomBody.h>
+#include <faiss/IndexNeuroValence.h>
+#include <faiss/IndexNeuroPlaceCell.h>
+#include <faiss/IndexNeuroGridCell.h>
+#include <faiss/IndexNeuroPatternCompletion.h>
+#include <faiss/IndexNeuroRemapping.h>
+#include <faiss/IndexNeuroGranule.h>
+#include <faiss/IndexNeuroTemporal.h>
+#include <faiss/IndexNeuroErrorDriven.h>
+#include <faiss/IndexNeuroAnchor.h>
+#include <faiss/IndexNeuroAdaptiveMetric.h>
+#include <faiss/IndexNeuroPQAware.h>
+#include <faiss/IndexNeuroCrossModal.h>
 #include <faiss/impl/Panorama.h>
 #include <faiss/impl/PanoramaStats.h>
 
@@ -547,6 +563,26 @@ void gpu_sync_all_devices()
 %include  <faiss/IndexNeuroParallelVoting.h>
 %include  <faiss/IndexNeuroCoarseToFine.h>
 %include  <faiss/IndexNeuroCache.h>
+%include  <faiss/IndexNeuroHash.h>
+%include  <faiss/IndexNeuroFlyHash.h>
+%include  <faiss/IndexNeuroColumnHash.h>
+%include  <faiss/IndexNeuroMushroomBody.h>
+%include  <faiss/IndexNeuroValence.h>
+%include  <faiss/IndexNeuroPlaceCell.h>
+%include  <faiss/IndexNeuroGridCell.h>
+%include  <faiss/IndexNeuroPatternCompletion.h>
+%include  <faiss/IndexNeuroRemapping.h>
+%include  <faiss/IndexNeuroGranule.h>
+%include  <faiss/IndexNeuroTemporal.h>
+%include  <faiss/IndexNeuroErrorDriven.h>
+%include  <faiss/IndexNeuroAnchor.h>
+
+// Ignore unique_ptr members and methods that SWIG can't handle
+%ignore faiss::IndexNeuroAdaptiveMetric::candidate_metrics;
+%ignore faiss::IndexNeuroAdaptiveMetric::add_metric;
+%include  <faiss/IndexNeuroAdaptiveMetric.h>
+%include  <faiss/IndexNeuroPQAware.h>
+%include  <faiss/IndexNeuroCrossModal.h>
 %include  <faiss/IndexLSH.h>
 %include  <faiss/impl/PolysemousTraining.h>
 %include  <faiss/IndexPQ.h>

@@ -70,12 +70,12 @@ struct NeuroEliminationParams : NeuroSearchParameters {
     virtual ~NeuroEliminationParams() = default;
 };
 
-/// Parameters for dropout ensemble (ED-05)
+/// Parameters for dropout ensemble (ED-05, ED-05v2)
 struct NeuroDropoutParams : NeuroSearchParameters {
-    int num_views = 5;
+    int num_views = 7;  ///< V2: increased from 5 to 7 for better coverage
     float dropout_rate = 0.3f;
     NeuroDropoutMode dropout_mode = NEURO_DROPOUT_COMPLEMENTARY;
-    NeuroIntegrationMethod integration = NEURO_INTEGRATE_BORDA;
+    NeuroIntegrationMethod integration = NEURO_INTEGRATE_FULL_RERANK;  ///< V2: FULL_RERANK for better recall
     int top_k_per_view = 0; ///< 0 = auto (k*2)
 
     virtual ~NeuroDropoutParams() = default;
@@ -101,6 +101,90 @@ struct NeuroSearchStats {
     int64_t calculations_performed = 0;
     int columns_used = 0;
     float time_ms = 0.0f;
+};
+
+/*************************************************************
+ * MT-00: Pluggable Metric Interface
+ *
+ * Abstract distance computation allowing V2 strategies to use
+ * different similarity/distance measures.
+ *************************************************************/
+
+/** Abstract base class for distance/similarity metrics.
+ *
+ * All V2 strategies can optionally accept a NeuroMetric* to
+ * override the default L2 distance computation.
+ */
+struct NeuroMetric {
+    virtual ~NeuroMetric() = default;
+
+    /** Compute distance between two vectors.
+     * @param x1  first vector of dimension d
+     * @param x2  second vector of dimension d
+     * @param d   dimensionality
+     * @return distance value (lower = more similar for most metrics)
+     */
+    virtual float distance(const float* x1, const float* x2, int d) const = 0;
+
+    /** Compute distances from query to multiple data vectors.
+     * @param query  query vector of dimension d
+     * @param data   n data vectors, contiguous (n * d floats)
+     * @param n      number of data vectors
+     * @param d      dimensionality
+     * @param out    output array of n distances
+     */
+    virtual void distance_batch(
+            const float* query,
+            const float* data,
+            idx_t n,
+            int d,
+            float* out) const;
+
+    /// Whether distance(x, y) == distance(y, x)
+    virtual bool is_symmetric() const { return true; }
+
+    /// Whether lower values indicate more similar vectors
+    virtual bool lower_is_better() const { return true; }
+};
+
+/// L2 (Euclidean squared) distance metric
+struct NeuroMetricL2 : NeuroMetric {
+    float distance(const float* x1, const float* x2, int d) const override;
+    void distance_batch(
+            const float* query,
+            const float* data,
+            idx_t n,
+            int d,
+            float* out) const override;
+};
+
+/// Cosine distance: 1 - cosine_similarity
+struct NeuroMetricCosine : NeuroMetric {
+    float distance(const float* x1, const float* x2, int d) const override;
+};
+
+/// Inner product (dot product) - higher is better
+struct NeuroMetricDot : NeuroMetric {
+    float distance(const float* x1, const float* x2, int d) const override;
+    bool lower_is_better() const override { return false; }
+};
+
+/// Mahalanobis distance with diagonal covariance
+struct NeuroMetricMahalanobis : NeuroMetric {
+    std::vector<float> inv_variances;  ///< 1/variance per dimension
+
+    explicit NeuroMetricMahalanobis(const std::vector<float>& variances);
+    NeuroMetricMahalanobis() = default;
+
+    /// Compute inverse variances from data (n samples, d dimensions)
+    void fit(const float* data, idx_t n, int d);
+
+    float distance(const float* x1, const float* x2, int d) const override;
+};
+
+/// Jaccard distance for sparse binary vectors (stored as floats, 0/1)
+struct NeuroMetricJaccard : NeuroMetric {
+    float distance(const float* x1, const float* x2, int d) const override;
 };
 
 /** Base class for all NeuroDistance index wrappers.

@@ -162,56 +162,84 @@ void IndexNeuroWeighted::feedback_contrastive(
             (int)weights.size() == d, "weights not initialized, call train()");
     FAISS_THROW_IF_NOT_MSG(n_negatives >= 1, "need at least 1 negative");
 
-    std::vector<float> gradient(d, 0.0f);
+    // MR-03v2: Momentum velocity accumulator
+    std::vector<float> velocity(d, 0.0f);
 
-    for (idx_t q = 0; q < nq; q++) {
-        const float* qvec = queries + q * d;
-        const float* pvec = positives + q * d;
+    // MR-03v2: Number of hard negatives to consider per query
+    int n_hard = std::max(1, static_cast<int>(n_negatives * hard_negative_ratio));
 
-        // Hard negative mining: find the negative closest to the query
-        // (hardest to distinguish from positive)
-        const float* best_neg = negatives + q * n_negatives * d;
-        float best_neg_dist = std::numeric_limits<float>::max();
-        for (int n = 0; n < n_negatives; n++) {
-            const float* nvec = negatives + (q * n_negatives + n) * d;
-            float dist = 0.0f;
+    // MR-03v2: Run multiple iterations
+    for (int iter = 0; iter < contrastive_iterations; iter++) {
+        std::vector<float> gradient(d, 0.0f);
+
+        for (idx_t q = 0; q < nq; q++) {
+            const float* qvec = queries + q * d;
+            const float* pvec = positives + q * d;
+
+            // MR-03v2: Hard negative mining - find top n_hard closest negatives
+            std::vector<std::pair<float, int>> neg_dists(n_negatives);
+            for (int n = 0; n < n_negatives; n++) {
+                const float* nvec = negatives + (q * n_negatives + n) * d;
+                float dist = 0.0f;
+                for (int j = 0; j < d; j++) {
+                    float diff = qvec[j] - nvec[j];
+                    dist += weights[j] * diff * diff;
+                }
+                neg_dists[n] = {dist, n};
+            }
+
+            // Sort by distance (ascending) to get hardest negatives
+            std::partial_sort(
+                    neg_dists.begin(),
+                    neg_dists.begin() + n_hard,
+                    neg_dists.end());
+
+            // MR-03v2: Accumulate gradient from top n_hard negatives
+            for (int h = 0; h < n_hard; h++) {
+                int neg_idx = neg_dists[h].second;
+                const float* nvec = negatives + (q * n_negatives + neg_idx) * d;
+
+                // Margin-based contrastive update
+                for (int j = 0; j < d; j++) {
+                    float dp = (qvec[j] - pvec[j]) * (qvec[j] - pvec[j]);
+                    float dn = (qvec[j] - nvec[j]) * (qvec[j] - nvec[j]);
+
+                    // Per-dimension margin scales the gradient magnitude
+                    float margin = std::abs(dp - dn);
+                    float scaled_margin = 1.0f + margin_scale * margin;
+
+                    if (dp < dn) {
+                        gradient[j] += scaled_margin;
+                    } else if (dp > dn) {
+                        gradient[j] -= scaled_margin;
+                    }
+                }
+            }
+        }
+
+        // Normalize gradient by number of samples
+        float sample_count = static_cast<float>(nq * n_hard);
+        if (sample_count > 0) {
             for (int j = 0; j < d; j++) {
-                float diff = qvec[j] - nvec[j];
-                dist += weights[j] * diff * diff;
-            }
-            if (dist < best_neg_dist) {
-                best_neg_dist = dist;
-                best_neg = nvec;
+                gradient[j] /= sample_count;
             }
         }
 
-        // Margin-based contrastive update
+        // MR-03v2: Apply momentum update
         for (int j = 0; j < d; j++) {
-            float dp = (qvec[j] - pvec[j]) * (qvec[j] - pvec[j]);
-            float dn = (qvec[j] - best_neg[j]) * (qvec[j] - best_neg[j]);
-
-            // Per-dimension margin scales the gradient magnitude
-            float margin = std::abs(dp - dn);
-            float scaled_margin = 1.0f + margin_scale * margin;
-
-            if (dp < dn) {
-                gradient[j] += scaled_margin;
-            } else if (dp > dn) {
-                gradient[j] -= scaled_margin;
-            }
+            velocity[j] = contrastive_momentum * velocity[j] + gradient[j];
         }
-    }
 
-    // Apply decay
-    for (int j = 0; j < d; j++) {
-        weights[j] *= weight_decay;
-    }
+        // Apply decay
+        for (int j = 0; j < d; j++) {
+            weights[j] *= weight_decay;
+        }
 
-    // Apply gradient with learning rate
-    float scale = learning_rate / std::max(nq, (idx_t)1);
-    for (int j = 0; j < d; j++) {
-        weights[j] += scale * gradient[j];
-        weights[j] = std::max(weights[j], min_weight);
+        // Apply velocity (momentum-accumulated gradient) with learning rate
+        for (int j = 0; j < d; j++) {
+            weights[j] += learning_rate * velocity[j];
+            weights[j] = std::max(weights[j], min_weight);
+        }
     }
 
     feedback_count++;

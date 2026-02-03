@@ -29,6 +29,9 @@ struct NeuroWeightedParams : NeuroSearchParameters {
  *   - Dimensions that help correct rankings get weight increase
  *   - Dimensions that hurt get weight decrease
  *   - Exponential decay toward uniform to prevent divergence
+ *
+ * MR-03v2: feedback_contrastive() supports multiple iterations with
+ * momentum-based updates and hard negative mining for improved convergence.
  */
 struct IndexNeuroWeighted : IndexNeuro {
     std::vector<float> weights; ///< per-dimension weights, size = d
@@ -36,6 +39,15 @@ struct IndexNeuroWeighted : IndexNeuro {
     float learning_rate = 0.05f;  ///< step size for weight updates
     float weight_decay = 0.99f;   ///< multiplicative decay per feedback round
     float min_weight = 0.01f;     ///< floor to prevent zero weights
+
+    /// MR-03v2: Number of iterations for contrastive feedback (default 5)
+    int contrastive_iterations = 5;
+
+    /// MR-03v2: Ratio of negatives to use for hard mining (0.3 = top 30%)
+    float hard_negative_ratio = 0.3f;
+
+    /// MR-03v2: Momentum for gradient accumulation (0.9)
+    float contrastive_momentum = 0.9f;
 
     int feedback_count = 0; ///< number of feedback() calls so far
 
@@ -74,12 +86,18 @@ struct IndexNeuroWeighted : IndexNeuro {
             const float* positives,
             const float* negatives);
 
-    /** MR-03: Contrastive feedback with margin-based gradient scaling.
+    /** MR-03v2: Multi-iteration contrastive feedback with momentum.
+     *
+     * Runs multiple iterations (contrastive_iterations) of margin-based
+     * gradient updates with momentum accumulation. Each iteration:
+     *   1. Selects hard negatives (top hard_negative_ratio by distance)
+     *   2. Computes margin-scaled gradient
+     *   3. Applies momentum: v = momentum * v + gradient
+     *   4. Updates weights with momentum velocity
      *
      * Uses per-dimension margin: margin_j = |dp_j - dn_j| to scale
      * the gradient. Large margins get larger updates (more confident
-     * signal). Supports multiple negatives per query for hard negative
-     * mining - the hardest negative (smallest distance to query) is used.
+     * signal).
      *
      * @param nq             number of queries
      * @param queries        query vectors (nq * d)

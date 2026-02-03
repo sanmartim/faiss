@@ -91,6 +91,7 @@ std::vector<int> default_column_order(int d) {
 }
 
 /// Compute adaptive cutoff based on dispersion of single-column distances
+/// V2: Added minimum cutoff floor to prevent over-aggressive elimination
 float adaptive_cutoff(
         const std::vector<float>& col_dists,
         size_t n_candidates,
@@ -123,15 +124,20 @@ float adaptive_cutoff(
     float dispersion = static_cast<float>(std_dev / mean);
 
     // Map dispersion to cutoff via linear interpolation
+    float cutoff;
     if (dispersion <= dispersion_low) {
-        return cutoff_low;
+        cutoff = cutoff_low;
+    } else if (dispersion >= dispersion_high) {
+        cutoff = cutoff_high;
+    } else {
+        float t = (dispersion - dispersion_low) /
+                (dispersion_high - dispersion_low);
+        cutoff = cutoff_low + t * (cutoff_high - cutoff_low);
     }
-    if (dispersion >= dispersion_high) {
-        return cutoff_high;
-    }
-    float t = (dispersion - dispersion_low) /
-            (dispersion_high - dispersion_low);
-    return cutoff_low + t * (cutoff_high - cutoff_low);
+
+    // V2: Enforce minimum cutoff floor (never eliminate more than 40%)
+    // cutoff_high serves as the floor (default 0.6)
+    return std::max(cutoff, cutoff_high);
 }
 
 /// Search for a single query using progressive elimination.

@@ -60,6 +60,22 @@ set(FAISS_SRC
   IndexNeuroParallelVoting.cpp
   IndexNeuroCoarseToFine.cpp
   IndexNeuroCache.cpp
+  IndexNeuroHash.cpp
+  IndexNeuroFlyHash.cpp
+  IndexNeuroColumnHash.cpp
+  IndexNeuroMushroomBody.cpp
+  IndexNeuroValence.cpp
+  IndexNeuroPlaceCell.cpp
+  IndexNeuroGridCell.cpp
+  IndexNeuroPatternCompletion.cpp
+  IndexNeuroRemapping.cpp
+  IndexNeuroGranule.cpp
+  IndexNeuroTemporal.cpp
+  IndexNeuroErrorDriven.cpp
+  IndexNeuroAnchor.cpp
+  IndexNeuroAdaptiveMetric.cpp
+  IndexNeuroPQAware.cpp
+  IndexNeuroCrossModal.cpp
   MatrixStats.cpp
   MetaIndexes.cpp
   VectorTransform.cpp
@@ -172,6 +188,22 @@ set(FAISS_HEADERS
   IndexNeuroParallelVoting.h
   IndexNeuroCoarseToFine.h
   IndexNeuroCache.h
+  IndexNeuroHash.h
+  IndexNeuroFlyHash.h
+  IndexNeuroColumnHash.h
+  IndexNeuroMushroomBody.h
+  IndexNeuroValence.h
+  IndexNeuroPlaceCell.h
+  IndexNeuroGridCell.h
+  IndexNeuroPatternCompletion.h
+  IndexNeuroRemapping.h
+  IndexNeuroGranule.h
+  IndexNeuroTemporal.h
+  IndexNeuroErrorDriven.h
+  IndexNeuroAnchor.h
+  IndexNeuroAdaptiveMetric.h
+  IndexNeuroPQAware.h
+  IndexNeuroCrossModal.h
   IndexLattice.h
   IndexNNDescent.h
   IndexNSG.h

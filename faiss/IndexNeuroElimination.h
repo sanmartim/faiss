@@ -38,11 +38,11 @@ struct IndexNeuroElimination : IndexNeuro {
     /// Minimum surviving candidates; 0 = auto (k * 2)
     int min_candidates = 0;
 
-    /// ED-02: dispersion thresholds
-    float dispersion_low = 0.3f;
-    float dispersion_high = 0.7f;
-    float cutoff_low_dispersion = 0.8f;
-    float cutoff_high_dispersion = 0.3f;
+    /// ED-02: dispersion thresholds (V2: conservative defaults for better recall)
+    float dispersion_low = 0.15f;
+    float dispersion_high = 0.5f;
+    float cutoff_low_dispersion = 0.9f;
+    float cutoff_high_dispersion = 0.6f;  // V2: floor at 0.6 (never eliminate >40%)
 
     /// ED-03: fraction of vectors to sample for variance computation
     float sample_fraction = 0.05f;
