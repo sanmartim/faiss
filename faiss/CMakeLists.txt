@@ -76,6 +76,9 @@ set(FAISS_SRC
   IndexNeuroAdaptiveMetric.cpp
   IndexNeuroPQAware.cpp
   IndexNeuroCrossModal.cpp
+  IndexNeuroScalarQuantization.cpp
+  IndexNeuroZonedBinarization.cpp
+  IndexNeuroSIMDDistance.cpp
   MatrixStats.cpp
   MetaIndexes.cpp
   VectorTransform.cpp
@@ -204,6 +207,9 @@ set(FAISS_HEADERS
   IndexNeuroAdaptiveMetric.h
   IndexNeuroPQAware.h
   IndexNeuroCrossModal.h
+  IndexNeuroScalarQuantization.h
+  IndexNeuroZonedBinarization.h
+  IndexNeuroSIMDDistance.h
   IndexLattice.h
   IndexNNDescent.h
   IndexNSG.h

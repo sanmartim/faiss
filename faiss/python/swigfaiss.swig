@@ -197,6 +197,9 @@ typedef uint64_t size_t;
 #include <faiss/IndexNeuroAdaptiveMetric.h>
 #include <faiss/IndexNeuroPQAware.h>
 #include <faiss/IndexNeuroCrossModal.h>
+#include <faiss/IndexNeuroScalarQuantization.h>
+#include <faiss/IndexNeuroZonedBinarization.h>
+#include <faiss/IndexNeuroSIMDDistance.h>
 #include <faiss/impl/Panorama.h>
 #include <faiss/impl/PanoramaStats.h>
 
@@ -602,6 +605,9 @@ void gpu_sync_all_devices()
 %include  <faiss/IVFlib.h>
 %include  <faiss/impl/ScalarQuantizer.h>
 %include  <faiss/IndexScalarQuantizer.h>
+%include  <faiss/IndexNeuroScalarQuantization.h>
+%include  <faiss/IndexNeuroZonedBinarization.h>
+%include  <faiss/IndexNeuroSIMDDistance.h>
 %include  <faiss/IndexIVFSpectralHash.h>
 %include  <faiss/IndexIVFAdditiveQuantizer.h>
 %include  <faiss/impl/HNSW.h>
