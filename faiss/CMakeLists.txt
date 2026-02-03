@@ -79,6 +79,11 @@ set(FAISS_SRC
   IndexNeuroScalarQuantization.cpp
   IndexNeuroZonedBinarization.cpp
   IndexNeuroSIMDDistance.cpp
+  IndexNeuroProductQuantizationTiered.cpp
+  IndexNeuroEarlyTermination.cpp
+  IndexNeuroBatchedQueries.cpp
+  IndexNeuroDiskANN.cpp
+  IndexNeuroOverlappingPartitions.cpp
   MatrixStats.cpp
   MetaIndexes.cpp
   VectorTransform.cpp
@@ -210,6 +215,11 @@ set(FAISS_HEADERS
   IndexNeuroScalarQuantization.h
   IndexNeuroZonedBinarization.h
   IndexNeuroSIMDDistance.h
+  IndexNeuroProductQuantizationTiered.h
+  IndexNeuroEarlyTermination.h
+  IndexNeuroBatchedQueries.h
+  IndexNeuroDiskANN.h
+  IndexNeuroOverlappingPartitions.h
   IndexLattice.h
   IndexNNDescent.h
   IndexNSG.h

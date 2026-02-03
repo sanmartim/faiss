@@ -200,6 +200,11 @@ typedef uint64_t size_t;
 #include <faiss/IndexNeuroScalarQuantization.h>
 #include <faiss/IndexNeuroZonedBinarization.h>
 #include <faiss/IndexNeuroSIMDDistance.h>
+#include <faiss/IndexNeuroProductQuantizationTiered.h>
+#include <faiss/IndexNeuroEarlyTermination.h>
+#include <faiss/IndexNeuroBatchedQueries.h>
+#include <faiss/IndexNeuroDiskANN.h>
+#include <faiss/IndexNeuroOverlappingPartitions.h>
 #include <faiss/impl/Panorama.h>
 #include <faiss/impl/PanoramaStats.h>
 
@@ -608,6 +613,13 @@ void gpu_sync_all_devices()
 %include  <faiss/IndexNeuroScalarQuantization.h>
 %include  <faiss/IndexNeuroZonedBinarization.h>
 %include  <faiss/IndexNeuroSIMDDistance.h>
+%include  <faiss/IndexNeuroProductQuantizationTiered.h>
+%include  <faiss/IndexNeuroEarlyTermination.h>
+%include  <faiss/IndexNeuroBatchedQueries.h>
+// Ignore non-copyable fstream member
+%ignore faiss::IndexNeuroDiskANN::disk_file;
+%include  <faiss/IndexNeuroDiskANN.h>
+%include  <faiss/IndexNeuroOverlappingPartitions.h>
 %include  <faiss/IndexIVFSpectralHash.h>
 %include  <faiss/IndexIVFAdditiveQuantizer.h>
 %include  <faiss/impl/HNSW.h>
