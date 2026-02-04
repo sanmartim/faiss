@@ -111,10 +111,26 @@ void IndexNeuroTemporal::add_sequence(int seq_length, const float* x) {
     ntotal++;
 }
 
+void IndexNeuroTemporal::add(idx_t n, const float* x) {
+    FAISS_THROW_IF_NOT_MSG(is_trained, "index must be trained before adding");
+
+    // For standard add(), treat each vector as a single-timestep sequence
+    // and also store the original vectors for L2 distance computation
+    for (idx_t i = 0; i < n; i++) {
+        add_sequence(1, x + i * d);
+    }
+
+    // Store original vectors for reranking
+    size_t old_size = original_vectors.size();
+    original_vectors.resize(old_size + n * d);
+    std::copy(x, x + n * d, original_vectors.data() + old_size);
+}
+
 void IndexNeuroTemporal::reset() {
     IndexNeuro::reset();
     encoded_data.clear();
     sequence_lengths.clear();
+    original_vectors.clear();
 }
 
 void IndexNeuroTemporal::search_sequence(
@@ -178,13 +194,58 @@ void IndexNeuroTemporal::search(
         float* distances,
         idx_t* labels,
         const SearchParameters* params) const {
-    // Default behavior: treat input as single-timestep sequences
-    // Use params to specify actual sequence length
+    FAISS_THROW_IF_NOT_MSG(is_trained, "index must be trained");
+
+    // Check if we have original vectors (from standard add())
+    bool has_original = !original_vectors.empty();
 
     int seq_len = 1;
     auto tp = dynamic_cast<const NeuroTemporalParams*>(params);
     if (tp && tp->sequence_length > 0) {
         seq_len = tp->sequence_length;
+    }
+
+    idx_t nb = static_cast<idx_t>(sequence_lengths.size());
+    if (nb == 0) {
+        for (idx_t q = 0; q < n; q++) {
+            for (idx_t i = 0; i < k; i++) {
+                distances[q * k + i] = std::numeric_limits<float>::max();
+                labels[q * k + i] = -1;
+            }
+        }
+        return;
+    }
+
+    // For standard vectors (seq_len=1), use L2 distance on original data
+    if (has_original && seq_len == 1) {
+#pragma omp parallel for
+        for (idx_t q = 0; q < n; q++) {
+            const float* query = x + q * d;
+
+            // Compute L2 distances to all original vectors
+            std::vector<std::pair<float, idx_t>> scored(nb);
+            for (idx_t i = 0; i < nb; i++) {
+                const float* data = original_vectors.data() + i * d;
+                float dist = fvec_L2sqr(query, data, d);
+                scored[i] = {dist, i};
+            }
+
+            // Sort and output
+            size_t actual_k =
+                    std::min(static_cast<size_t>(k), static_cast<size_t>(nb));
+            std::partial_sort(
+                    scored.begin(), scored.begin() + actual_k, scored.end());
+
+            for (size_t i = 0; i < actual_k; i++) {
+                distances[q * k + i] = scored[i].first;
+                labels[q * k + i] = scored[i].second;
+            }
+            for (size_t i = actual_k; i < static_cast<size_t>(k); i++) {
+                distances[q * k + i] = std::numeric_limits<float>::max();
+                labels[q * k + i] = -1;
+            }
+        }
+        return;
     }
 
     // Each query is a sequence of seq_len timesteps

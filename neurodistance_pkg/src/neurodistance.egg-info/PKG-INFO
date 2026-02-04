@@ -1,0 +1,193 @@
+Metadata-Version: 2.1
+Name: neurodistance
+Version: 0.5.0
+Summary: Bio-inspired vector search strategies for FAISS
+Author-email: NeuroDistance Team <neurodistance@example.com>
+License: MIT
+Project-URL: Homepage, https://github.com/neurodistance/neurodistance
+Project-URL: Bug Tracker, https://github.com/neurodistance/neurodistance/issues
+Project-URL: Documentation, https://github.com/neurodistance/neurodistance#readme
+Keywords: faiss,vector-search,nearest-neighbor,bio-inspired,machine-learning
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: Science/Research
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Topic :: Scientific/Engineering :: Artificial Intelligence
+Classifier: Topic :: Scientific/Engineering :: Information Analysis
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+Requires-Dist: numpy>=1.19.0
+Provides-Extra: dev
+Requires-Dist: pytest>=7.0.0; extra == "dev"
+Requires-Dist: pytest-cov>=4.0.0; extra == "dev"
+Provides-Extra: sklearn
+Requires-Dist: scikit-learn>=1.0.0; extra == "sklearn"
+
+# NeuroDistance
+
+Bio-inspired vector search strategies for FAISS.
+
+## Installation
+
+```bash
+pip install neurodistance
+```
+
+**Note:** Requires FAISS with NeuroDistance extensions compiled. See the main FAISS repository for build instructions.
+
+## Quick Start
+
+```python
+from neurodistance import Memory
+
+# Create a memory with bio-inspired index
+mem = Memory(n_neighbors=5, metric='NEURO_DYNAMIC_PART')
+mem.fit(X_train, y_train)
+predictions = mem.predict(X_test)
+```
+
+## Available Indexes
+
+NeuroDistance provides 60+ neural-inspired index types organized into 5 versions:
+
+### Standard (FAISS baseline)
+- `L2` - Euclidean distance (exact)
+- `IP` - Inner product (exact)
+- `HNSW` - Hierarchical NSW (fast approximate)
+- `IVF` - Inverted file index
+- `PQ` - Product quantization
+- `LSH` - Locality sensitive hashing
+
+### V1 Original
+- `NEURO_ELIM` - Column elimination (pruning low-variance dimensions)
+- `NEURO_WEIGHTED` - Weighted distance (learned dimension weights)
+- `NEURO_CONTEXTUAL` - Contextual weighting (query-dependent)
+- `NEURO_DROPOUT` - Dropout ensemble (random subspaces)
+- `NEURO_VOTING` - Parallel voting (ensemble of sub-indexes)
+
+### V2 Bio-Inspired
+- `NEURO_HASH` - Locality-sensitive hashing
+- `NEURO_FLYHASH` - Fly-inspired sparse random projection
+- `NEURO_MUSHROOM` - Mushroom body (sparse expansion + winner-take-all)
+- `NEURO_PLACECELL` - Place cell (spatial memory with receptive fields)
+- `NEURO_GRIDCELL` - Grid cell (periodic spatial encoding)
+- `NEURO_PATTERN` - Pattern completion (Hopfield-like)
+- `NEURO_TEMPORAL` - Temporal basis (sequence encoding)
+- `NEURO_ANCHOR` - Anchor-based similarity
+
+### V3 Performance
+- `NEURO_SEMANTIC_SHARD` - Semantic sharding (69x speedup, 98% recall)
+- `NEURO_DYNAMIC_PART` - Dynamic partitions (27x speedup, 100% recall)
+- `NEURO_DISKANN` - DiskANN-style graph index
+- `NEURO_SCALAR_Q` - Scalar quantization (8-bit)
+- `NEURO_ADAPTIVE_Q` - Adaptive quantization
+
+### V4 Multi-Scale (experimental)
+- `NEURO_MS_SIGN` - Multi-scale sign (binary, 50% recall limit)
+- `NEURO_HAMMING_PRE` - Hamming prefilter
+- `NEURO_PIPELINE` - Recommended pipeline
+
+### V5 MicroZones (100% recall)
+- `NEURO_MICROZONES` - MicroZones with 4 zones
+- `NEURO_MICROZONES_8` - MicroZones with 8 zones
+- `NEURO_MICROZONES_16` - MicroZones with 16 zones
+- `NEURO_MZS_100` - MultiZoneSign 100 scales (tanh)
+- `NEURO_MZS_300` - MultiZoneSign 300 scales
+- `NEURO_MZS_1000` - MultiZoneSign 1000 scales
+- `NEURO_MZS_SIN` - MultiZoneSign with sin function
+- `NEURO_MZS_SIGMOID` - MultiZoneSign with sigmoid
+- `NEURO_MZS_ATAN` - MultiZoneSign with atan
+- `NEURO_MZS_ERF` - MultiZoneSign with erf
+
+## Recommended Indexes
+
+### Production (100% Recall)
+```python
+from neurodistance import get_recommended
+
+# Get recommendations for 100% recall production use
+for name, desc in get_recommended('production_100_recall'):
+    print(f"{name}: {desc}")
+```
+
+| Index | Recall | Speed vs L2 |
+|-------|--------|-------------|
+| `NEURO_DYNAMIC_PART` | 100% | 27x faster |
+| `IVF` | 100% | 25-30x faster |
+| `HNSW` | 99%+ | Very fast |
+
+### Production (Max Speed)
+| Index | Recall | Speed vs L2 |
+|-------|--------|-------------|
+| `NEURO_SEMANTIC_SHARD` | 98% | 69x faster |
+| `NEURO_DYNAMIC_PART` | 100% | 27x faster |
+
+## API Reference
+
+### Memory Class
+
+scikit-learn compatible interface for vector search.
+
+```python
+from neurodistance import Memory
+
+# Initialize
+mem = Memory(
+    n_neighbors=5,           # Number of neighbors to return
+    metric='NEURO_DYNAMIC_PART',  # Index type
+    weights='uniform'        # 'uniform' or 'distance'
+)
+
+# Fit with training data
+mem.fit(X_train, y_train)
+
+# Predict labels
+predictions = mem.predict(X_test)
+
+# Get neighbors
+distances, indices = mem.kneighbors(X_test, n_neighbors=10)
+
+# Predict probabilities
+proba = mem.predict_proba(X_test)
+```
+
+### Utility Functions
+
+```python
+from neurodistance import list_indexes, get_recommended, create_index
+
+# List all available indexes
+list_indexes()
+
+# List indexes in a category
+list_indexes('v3_perf')
+
+# Get recommended indexes for a use case
+recommendations = get_recommended('production_100_recall')
+
+# Create a raw FAISS index
+index = create_index('NEURO_MICROZONES', d=128, n=10000)
+```
+
+## Performance Benchmarks
+
+Tested on 10,000 vectors, 128 dimensions, k=10:
+
+| Index | Recall@10 | QPS | Notes |
+|-------|-----------|-----|-------|
+| L2 (baseline) | 100% | 1x | Exact search |
+| IVF | 100% | 27x | Tuned nprobe |
+| NEURO_DYNAMIC_PART | 100% | 27x | Auto-tuned |
+| NEURO_SEMANTIC_SHARD | 98% | 69x | Slight recall loss |
+| NEURO_MICROZONES | 100% | 3x | Zone quantization |
+
+## License
+
+MIT License

@@ -1,0 +1,91 @@
+Metadata-Version: 2.1
+Name: neurodistance-standalone
+Version: 0.5.0
+Summary: Bio-inspired vector search strategies - standalone with bundled FAISS
+Author-email: NeuroDistance Team <neurodistance@example.com>
+License: MIT
+Project-URL: Homepage, https://github.com/neurodistance/neurodistance
+Keywords: faiss,vector-search,nearest-neighbor,bio-inspired,machine-learning
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: Science/Research
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: POSIX :: Linux
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Topic :: Scientific/Engineering :: Artificial Intelligence
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+Requires-Dist: numpy>=1.19.0
+Provides-Extra: dev
+Requires-Dist: pytest>=7.0.0; extra == "dev"
+Provides-Extra: sklearn
+Requires-Dist: scikit-learn>=1.0.0; extra == "sklearn"
+
+# NeuroDistance Standalone
+
+Bio-inspired vector search strategies with bundled FAISS binaries.
+
+**This is a standalone package** - no separate FAISS installation required!
+
+## Installation
+
+```bash
+pip install neurodistance_standalone-0.5.0-py3-none-linux_x86_64.whl
+```
+
+## Google Colab
+
+```python
+# Upload the wheel file to Colab, then:
+!pip install neurodistance_standalone-0.5.0-py3-none-linux_x86_64.whl
+
+from neurodistance import Memory, faiss
+
+# Create index
+mem = Memory(n_neighbors=5, metric='NEURO_DYNAMIC_PART')
+mem.fit(X_train, y_train)
+predictions = mem.predict(X_test)
+
+# Or use faiss directly
+index = faiss.IndexFlatL2(128)
+```
+
+## Quick Start
+
+```python
+from neurodistance import Memory, list_indexes, faiss
+
+# List all 60+ available indexes
+list_indexes()
+
+# Create a Memory with bio-inspired index
+mem = Memory(n_neighbors=5, metric='NEURO_DYNAMIC_PART')
+mem.fit(X_train, y_train)
+predictions = mem.predict(X_test)
+
+# Access FAISS directly
+index = faiss.IndexNeuroMicroZones(128, 4)
+```
+
+## Recommended Indexes for Production
+
+| Index | Recall | Speed |
+|-------|--------|-------|
+| `NEURO_DYNAMIC_PART` | 100% | 27x faster than L2 |
+| `NEURO_SEMANTIC_SHARD` | 98% | 69x faster than L2 |
+| `NEURO_MICROZONES` | 100% | Zone-based quantization |
+
+## Platform Support
+
+- Linux x86_64 (Ubuntu 20.04+)
+- Google Colab
+- Other Linux with glibc 2.31+
+
+## License
+
+MIT License

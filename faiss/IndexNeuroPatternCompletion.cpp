@@ -205,18 +205,26 @@ void IndexNeuroPatternCompletion::search(
     for (idx_t q = 0; q < n; q++) {
         const float* query = x + q * d;
 
-        // Complete the query pattern
-        std::vector<float> completed(d);
-        complete_pattern(query, default_mask, completed.data(), n_iter);
+        // Determine which dimensions to use for search
+        const float* search_query = query;
+        std::vector<float> completed;
 
-        // Search with completed query
+        // If we have a mask (partial query), use pattern completion
+        if (!default_mask.empty()) {
+            completed.resize(d);
+            complete_pattern(query, default_mask, completed.data(), n_iter);
+            search_query = completed.data();
+        }
+        // Otherwise use the query directly (standard L2 search)
+
+        // Search with query (completed or original)
         std::vector<std::pair<float, idx_t>> scored(nb);
         for (idx_t i = 0; i < nb; i++) {
             float dist;
             if (metric) {
-                dist = metric->distance(completed.data(), data + i * d, d);
+                dist = metric->distance(search_query, data + i * d, d);
             } else {
-                dist = fvec_L2sqr(completed.data(), data + i * d, d);
+                dist = fvec_L2sqr(search_query, data + i * d, d);
             }
             scored[i] = {dist, i};
             total_calcs += d;

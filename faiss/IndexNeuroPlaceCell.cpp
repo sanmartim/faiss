@@ -43,6 +43,25 @@ void IndexNeuroPlaceCell::train(idx_t n, const float* x) {
     FAISS_THROW_IF_NOT_MSG(inner_index, "inner_index is not set");
     FAISS_THROW_IF_NOT_MSG(d > 0, "dimension must be positive");
 
+    // Auto-compute field_size based on data if it's too small
+    // Estimate average distance between points to set a reasonable field_size
+    if (n > 1 && x != nullptr && field_size < 1.0f) {
+        // Sample some distances to estimate data scale
+        float avg_dist = 0.0f;
+        int n_samples = std::min(static_cast<idx_t>(100), n);
+        for (int i = 0; i < n_samples; i++) {
+            int j = (i + n_samples / 2) % n;
+            avg_dist += std::sqrt(fvec_L2sqr(x + i * d, x + j * d, d));
+        }
+        avg_dist /= n_samples;
+
+        // Set field_size to about 1/4 of average distance for good overlap
+        field_size = avg_dist / 4.0f;
+        if (field_size < 0.1f) {
+            field_size = 0.1f;
+        }
+    }
+
     inv_2_sigma_sq = 1.0f / (2.0f * field_size * field_size);
 
     // Initialize cell centers
@@ -217,8 +236,15 @@ void IndexNeuroPlaceCell::search(
                 }
                 total_calcs += d;
             } else {
-                // Use activation-based score (not distance)
-                dist = 0.0f;
+                // Use negative activation as distance (higher activation = lower distance)
+                // Compute sum of activations for this candidate across active cells
+                float activation_score = 0.0f;
+                const float* cand_vec = data + cand * d;
+                for (int cell : active_cells) {
+                    activation_score += cell_activation(cell, cand_vec);
+                }
+                // Negative because we want highest activation = lowest distance
+                dist = -activation_score;
             }
             scored.emplace_back(dist, cand);
         }

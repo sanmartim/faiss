@@ -213,7 +213,7 @@ void IndexNeuroAdaptiveScale::search(
 
     // Auto-compute max Hamming distance if not set
     if (max_hamming <= 0) {
-        max_hamming = d / 4;  // ~25% of bits can differ for better recall
+        max_hamming = d / 2;  // ~50% of bits can differ for better recall
     }
 
     bool collect = false;

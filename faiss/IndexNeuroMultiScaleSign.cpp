@@ -137,9 +137,9 @@ void IndexNeuroMultiScaleSign::search(
     }
 
     // Auto-compute max Hamming distance if not set
-    // For small datasets, allow more bits to differ
+    // Use d/2 (50% of bits can differ) for better recall on clustered data
     if (max_hamming <= 0) {
-        max_hamming = d / 4;  // ~25% of bits can differ for better recall
+        max_hamming = d / 2;  // ~50% of bits can differ for better recall
     }
 
     bool collect = false;

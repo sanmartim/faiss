@@ -106,6 +106,8 @@ set(FAISS_SRC
   IndexNeuroStatisticalPrescreen.cpp
   IndexNeuroEnsembleVoting.cpp
   IndexNeuroRecommendedPipeline.cpp
+  IndexNeuroMicroZones.cpp
+  IndexNeuroMultiZoneSign.cpp
   MatrixStats.cpp
   MetaIndexes.cpp
   VectorTransform.cpp
@@ -264,6 +266,8 @@ set(FAISS_HEADERS
   IndexNeuroStatisticalPrescreen.h
   IndexNeuroEnsembleVoting.h
   IndexNeuroRecommendedPipeline.h
+  IndexNeuroMicroZones.h
+  IndexNeuroMultiZoneSign.h
   IndexLattice.h
   IndexNNDescent.h
   IndexNSG.h

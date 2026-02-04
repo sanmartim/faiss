@@ -91,7 +91,7 @@ float IndexNeuroLearnedScale::evaluate_recall(
     }
 
     // Evaluate recall with signature filtering
-    int max_hamming = d / 16;
+    int max_hamming = d / 2;
     float total_recall = 0.0f;
 
     for (idx_t q = 0; q < nq; q++) {
@@ -264,7 +264,7 @@ void IndexNeuroLearnedScale::search(
 
     int max_hamming = max_hamming_distance;
     if (max_hamming <= 0) {
-        max_hamming = d / 16;
+        max_hamming = d / 2;
     }
 
     bool collect = false;

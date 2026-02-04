@@ -179,7 +179,7 @@ void IndexNeuroRecommendedPipeline::search(
     }
 
     // Auto-compute max Hamming distance - more permissive for better recall
-    int ms_max_hamming = d / 4;
+    int ms_max_hamming = d / 2;
 
     int64_t total_calcs = 0;
 

@@ -60,6 +60,9 @@ struct IndexNeuroTemporal : IndexNeuro {
     /// Stored sequence lengths for each vector
     std::vector<int> sequence_lengths;
 
+    /// Original vectors for L2 reranking (when using standard add())
+    std::vector<float> original_vectors;
+
     IndexNeuroTemporal() = default;
 
     /** Construct with inner IndexFlat.
@@ -77,6 +80,9 @@ struct IndexNeuroTemporal : IndexNeuro {
      * @param x           sequence data (T * d floats, row-major)
      */
     void add_sequence(int seq_length, const float* x);
+
+    /** Standard add - treats each vector as single-timestep sequence. */
+    void add(idx_t n, const float* x) override;
 
     void reset() override;
 

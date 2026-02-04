@@ -1,0 +1,15 @@
+MANIFEST.in
+README.md
+pyproject.toml
+src/neurodistance/__init__.py
+src/neurodistance/indexes.py
+src/neurodistance/memory.py
+src/neurodistance/swigfaiss.py
+src/neurodistance/libs/_swigfaiss.so
+src/neurodistance/libs/libfaiss.so
+src/neurodistance/libs/libfaiss_python_callbacks.so
+src/neurodistance_standalone.egg-info/PKG-INFO
+src/neurodistance_standalone.egg-info/SOURCES.txt
+src/neurodistance_standalone.egg-info/dependency_links.txt
+src/neurodistance_standalone.egg-info/requires.txt
+src/neurodistance_standalone.egg-info/top_level.txt

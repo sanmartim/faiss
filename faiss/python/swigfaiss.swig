@@ -227,6 +227,8 @@ typedef uint64_t size_t;
 #include <faiss/IndexNeuroStatisticalPrescreen.h>
 #include <faiss/IndexNeuroEnsembleVoting.h>
 #include <faiss/IndexNeuroRecommendedPipeline.h>
+#include <faiss/IndexNeuroMicroZones.h>
+#include <faiss/IndexNeuroMultiZoneSign.h>
 #include <faiss/impl/Panorama.h>
 #include <faiss/impl/PanoramaStats.h>
 
@@ -668,6 +670,8 @@ void gpu_sync_all_devices()
 %include  <faiss/IndexNeuroStatisticalPrescreen.h>
 %include  <faiss/IndexNeuroEnsembleVoting.h>
 %include  <faiss/IndexNeuroRecommendedPipeline.h>
+%include  <faiss/IndexNeuroMicroZones.h>
+%include  <faiss/IndexNeuroMultiZoneSign.h>
 %include  <faiss/IndexIVFSpectralHash.h>
 %include  <faiss/IndexIVFAdditiveQuantizer.h>
 %include  <faiss/impl/HNSW.h>
